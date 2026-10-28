@@ -240,9 +240,23 @@
     }
     .drawer-item.active { background: var(--accent-gold); color: #000; }
 
-    .admin-page-view { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: var(--bg-main); z-index: 3000; display: none; flex-direction: column; overflow-y: auto; }
-    .admin-page-header { background: var(--bg-card); border-bottom: 1px solid var(--border-color); padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
-    .admin-page-body { width: min(1300px, 94%); margin: 20px auto; flex-grow: 1; }
+    /* PANEL DE ADMINISTRACIÓN - MAQUETACIÓN FIJA PERFECTA */
+    .admin-page-view {
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: var(--bg-main); z-index: 3000; display: none;
+      flex-direction: column; overflow: hidden;
+    }
+    .admin-page-header {
+      background: var(--bg-card); border-bottom: 1px solid var(--border-color);
+      padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+    }
+    .admin-tabs-bar {
+      background: var(--bg-card); border-bottom: 1px solid var(--border-color);
+      padding: 10px 20px; display: flex; gap: 10px; overflow-x: auto; flex-shrink: 0;
+    }
+    .admin-page-body {
+      width: min(1300px, 94%); margin: 20px auto; flex-grow: 1; overflow-y: auto; padding-bottom: 40px;
+    }
 
     .admin-photos-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
     .admin-photo-thumb { position: relative; width: 65px; height: 50px; border-radius: 6px; border: 1px solid var(--border-color); overflow: hidden; }
@@ -545,6 +559,7 @@
     <div class="drawer-item" id="drawer-contacto" onclick="drawerNavigate('contacto')">📍 Contacto</div>
   </div>
 
+  <!-- PANEL DE ADMINISTRACIÓN ARREGLADO -->
   <div class="admin-page-view" id="adminPageView">
     <div class="admin-page-header">
       <div style="display:flex; align-items:center; gap:10px;">
@@ -554,7 +569,7 @@
       <button class="btn-outline-gold" style="padding:6px 12px; font-size:0.8rem;" onclick="closeAdminPanel()">✕ Cerrar</button>
     </div>
 
-    <div style="background:var(--bg-card); border-bottom:1px solid var(--border-color); padding:10px 20px; display:flex; gap:10px; overflow-x:auto;">
+    <div class="admin-tabs-bar">
       <button class="admin-tab-custom active" id="tab-stock" onclick="switchAdminTab('stock', this)">📦 Vehículos</button>
       <button class="admin-tab-custom" id="tab-add" onclick="switchAdminTab('add', this)">➕ Agregar</button>
       <button class="admin-tab-custom" id="tab-config" onclick="switchAdminTab('config', this)">⚙️ Configuración</button>
@@ -1635,7 +1650,5 @@
       fetchVehiclesFromSupabase();
     });
   </script>
-</body>
-</html>
 </body>
 </html>
