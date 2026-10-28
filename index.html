@@ -120,7 +120,6 @@
     }
     .control-input:focus, .control-select:focus { border-color: var(--accent-gold); }
 
-    /* GRILLA ADAPTABLE A 2 COLUMNAS EN MÓVIL */
     .vehicle-grid { 
       display: grid; 
       grid-template-columns: repeat(2, 1fr); 
@@ -240,7 +239,7 @@
     }
     .drawer-item.active { background: var(--accent-gold); color: #000; }
 
-    /* PANEL DE ADMINISTRACIÓN - MAQUETACIÓN FIJA PERFECTA */
+    /* PANEL DE ADMINISTRACIÓN */
     .admin-page-view {
       position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
       background: var(--bg-main); z-index: 3000; display: none;
@@ -559,7 +558,7 @@
     <div class="drawer-item" id="drawer-contacto" onclick="drawerNavigate('contacto')">📍 Contacto</div>
   </div>
 
-  <!-- PANEL DE ADMINISTRACIÓN ARREGLADO -->
+  <!-- PANEL DE ADMINISTRACIÓN -->
   <div class="admin-page-view" id="adminPageView">
     <div class="admin-page-header">
       <div style="display:flex; align-items:center; gap:10px;">
@@ -667,6 +666,52 @@
       if (e.target.id === 'lightboxModal') closeLightbox();
     });
 
+    /* SINCRONIZACIÓN DE CONFIGURACIÓN CON SUPABASE CON FALLBACK A LOCALSTORAGE */
+    async function fetchConfigFromSupabase() {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/configuracion?id=eq.1&select=*`, {
+          headers: {
+            "apikey": SUPABASE_KEY,
+            "Authorization": `Bearer ${SUPABASE_KEY}`
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.length > 0 && data[0].data) {
+            config = data[0].data;
+            localStorage.setItem('ag_config_data', JSON.stringify(config));
+          }
+        }
+      } catch (err) {
+        console.error("Error conectando a Supabase para configuración:", err);
+      }
+      applyConfigUI();
+    }
+
+    async function saveConfigState() {
+      if (config.featuredIds) {
+        config.featuredIds = config.featuredIds.replace(/\./g, ',');
+      }
+      localStorage.setItem('ag_config_data', JSON.stringify(config));
+      applyConfigUI();
+      renderHeroSlider();
+
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/configuracion?id=eq.1`, {
+          method: "PATCH",
+          headers: {
+            "apikey": SUPABASE_KEY,
+            "Authorization": `Bearer ${SUPABASE_KEY}`,
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal"
+          },
+          body: JSON.stringify({ data: config })
+        });
+      } catch (err) {
+        console.error("Error guardando la configuración en Supabase:", err);
+      }
+    }
+
     async function fetchVehiclesFromSupabase() {
       try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/vehiculos?select=*`, {
@@ -744,24 +789,18 @@
       return false;
     }
 
-    function saveConfigState() {
-      if (config.featuredIds) {
-        config.featuredIds = config.featuredIds.replace(/\./g, ',');
-      }
-      localStorage.setItem('ag_config_data', JSON.stringify(config));
-      applyConfigUI();
-      renderHeroSlider();
-    }
-
     function applyConfigUI() {
-      document.getElementById('info-address').textContent = config.address;
-      document.getElementById('info-hours').textContent = config.hours;
-      document.getElementById('info-phone').textContent = "+54 9 3804 37-4962";
-      document.getElementById('footer-address-text').textContent = config.address;
+      const cleanPhone = (config.phone || "5493804374962").replace(/\D/g, '');
+      const formattedPhone = cleanPhone.startsWith('549') ? `+54 9 ${cleanPhone.slice(3, 7)} ${cleanPhone.slice(7)}` : `+${cleanPhone}`;
+      
+      document.getElementById('info-address').textContent = config.address || "La Rioja, Argentina";
+      document.getElementById('info-hours').textContent = config.hours || "Lunes a Sábado: 9:00 - 13:00 | 16:30 - 20:30";
+      document.getElementById('info-phone').textContent = formattedPhone;
+      document.getElementById('footer-address-text').textContent = config.address || "La Rioja, Argentina";
     }
 
     function openGoogleMaps() {
-      const query = encodeURIComponent(config.address);
+      const query = encodeURIComponent(config.address || "La Rioja, Argentina");
       window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
     }
 
@@ -1033,13 +1072,18 @@
       header.classList.toggle('open');
     }
 
-    function openWhatsAppGeneral() { window.open(`https://wa.me/5493804374962`, '_blank'); }
-    function openInstagram() { window.open(config.instagram, '_blank'); }
+    function openWhatsAppGeneral() {
+      const cleanPhone = (config.phone || "5493804374962").replace(/\D/g, '');
+      window.open(`https://wa.me/${cleanPhone}`, '_blank');
+    }
+
+    function openInstagram() { window.open(config.instagram || "https://www.instagram.com/a.gautomotores/", '_blank'); }
 
     function sendWhatsAppVehicle() {
       if (!selectedVehicle) return;
+      const cleanPhone = (config.phone || "5493804374962").replace(/\D/g, '');
       const msg = `Hola! Quisiera consultar disponibilidad por el ${selectedVehicle.brand} ${selectedVehicle.model} (${selectedVehicle.year}) a ${selectedVehicle.price}.`;
-      window.open(`https://wa.me/5493804374962?text=${encodeURIComponent(msg)}`, '_blank');
+      window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
     }
 
     function sendWhatsAppTrade() {
@@ -1049,8 +1093,9 @@
       const s = document.getElementById('tradeState').value;
       if (!b) return alert("Ingresá al menos la marca y modelo.");
       
+      const cleanPhone = (config.phone || "5493804374962").replace(/\D/g, '');
       const msg = `Hola! Quisiera cotizar mi vehículo para permuta:\nUnidad: ${b}\nAño: ${y}\nKM: ${k}\nEstado: ${s}`;
-      window.open(`https://wa.me/5493804374962?text=${encodeURIComponent(msg)}`, '_blank');
+      window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
     }
 
     function openAdminPanel() {
@@ -1158,7 +1203,7 @@
       } else if (currentAdminTab === 'config') {
         body.innerHTML = `
           <div style="background:var(--bg-card); padding:20px; border-radius:10px; border:1px solid var(--border-color); max-width:600px;">
-            <h3 style="color:var(--accent-gold); margin-bottom:15px; font-size:1.1rem;">⚙️ Configuración de Cartelera</h3>
+            <h3 style="color:var(--accent-gold); margin-bottom:15px; font-size:1.1rem;">⚙️ Configuración de Cartelera y Contacto</h3>
             <div style="display:flex; flex-direction:column; gap:12px;">
               <div>
                 <label style="font-size:0.75rem; color:var(--text-secondary);">IDs Cortos de Cartelera (ej: a1, a3, c1, c3):</label>
@@ -1166,21 +1211,21 @@
               </div>
               <div>
                 <label style="font-size:0.75rem; color:var(--text-secondary);">Dirección Física:</label>
-                <input id="cfg-address" class="control-input" value="${config.address}">
+                <input id="cfg-address" class="control-input" value="${config.address || ''}">
               </div>
               <div>
-                <label style="font-size:0.75rem; color:var(--text-secondary);">Horarios:</label>
-                <input id="cfg-hours" class="control-input" value="${config.hours}">
+                <label style="font-size:0.75rem; color:var(--text-secondary);">Horarios de Atención:</label>
+                <input id="cfg-hours" class="control-input" value="${config.hours || ''}">
               </div>
               <div>
-                <label style="font-size:0.75rem; color:var(--text-secondary);">WhatsApp:</label>
-                <input id="cfg-phone" class="control-input" value="${config.phone}">
+                <label style="font-size:0.75rem; color:var(--text-secondary);">Número de WhatsApp (con código de país sin + ni espacios):</label>
+                <input id="cfg-phone" class="control-input" value="${config.phone || ''}">
               </div>
               <div>
-                <label style="font-size:0.75rem; color:var(--text-secondary);">Instagram:</label>
-                <input id="cfg-insta" class="control-input" value="${config.instagram}">
+                <label style="font-size:0.75rem; color:var(--text-secondary);">Enlace de Instagram:</label>
+                <input id="cfg-insta" class="control-input" value="${config.instagram || ''}">
               </div>
-              <button class="btn-gold" style="margin-top:5px; padding:10px;" onclick="saveConfigFromAdmin()">Guardar Cambios</button>
+              <button class="btn-gold" style="margin-top:5px; padding:10px;" onclick="saveConfigFromAdmin()">Guardar Cambios en la Nube</button>
             </div>
           </div>
         `;
@@ -1635,18 +1680,18 @@
       }
     }
 
-    function saveConfigFromAdmin() {
+    async function saveConfigFromAdmin() {
       config.featuredIds = document.getElementById('cfg-featured').value;
       config.address = document.getElementById('cfg-address').value;
       config.hours = document.getElementById('cfg-hours').value;
       config.phone = document.getElementById('cfg-phone').value;
       config.instagram = document.getElementById('cfg-insta').value;
-      saveConfigState();
-      alert("✅ Configuración guardada.");
+      await saveConfigState();
+      alert("✅ Configuración guardada correctamente.");
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-      applyConfigUI();
+      fetchConfigFromSupabase();
       fetchVehiclesFromSupabase();
     });
   </script>
