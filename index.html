@@ -436,6 +436,12 @@
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
 
+    // -------------------------------------------------------------
+    // CONFIGURACIÓN DE SUPABASE
+    // -------------------------------------------------------------
+    const SUPABASE_URL = "https://eurqojdpcggjsjrxddfg.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_gDde6ZNt8lbwARuwPz8Uiw_SNoPzjRi";
+
     const defaultConfig = {
       address: "Av. Principal 1234, La Rioja, Argentina",
       hours: "Lun-Sáb: 9:00 - 13:00 | 16:30 - 20:30",
@@ -445,6 +451,92 @@
     };
 
     let config = JSON.parse(localStorage.getItem('ag_config_data')) || defaultConfig;
+    let vehicles = [];
+    let selectedVehicle = null;
+    let currentAdminTab = 'stock';
+    let tempUploadImages = [];
+
+    // -------------------------------------------------------------
+    // FUNCIONES BASE DE DATOS EN LA NUBE (SUPABASE)
+    // -------------------------------------------------------------
+    async function fetchVehiclesFromSupabase() {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/vehiculos?select=*`, {
+          headers: {
+            "apikey": SUPABASE_KEY,
+            "Authorization": `Bearer ${SUPABASE_KEY}`
+          }
+        });
+        if (res.ok) {
+          const rows = await res.json();
+          vehicles = rows.map(r => ({
+            db_id: r.id,
+            ...r.data
+          }));
+          renderShowroom();
+          renderHeroSlider();
+        }
+      } catch (err) {
+        console.error("Error conectando a Supabase:", err);
+      }
+    }
+
+    async function saveVehicleToSupabase(vObj) {
+      try {
+        if (vObj.db_id) {
+          // Actualizar vehículo existente
+          const res = await fetch(`${SUPABASE_URL}/rest/v1/vehiculos?id=eq.${vObj.db_id}`, {
+            method: "PATCH",
+            headers: {
+              "apikey": SUPABASE_KEY,
+              "Authorization": `Bearer ${SUPABASE_KEY}`,
+              "Content-Type": "application/json",
+              "Prefer": "return=minimal"
+            },
+            body: JSON.stringify({ data: vObj })
+          });
+          return res.ok;
+        } else {
+          // Crear vehículo nuevo
+          const res = await fetch(`${SUPABASE_URL}/rest/v1/vehiculos`, {
+            method: "POST",
+            headers: {
+              "apikey": SUPABASE_KEY,
+              "Authorization": `Bearer ${SUPABASE_KEY}`,
+              "Content-Type": "application/json",
+              "Prefer": "return=representation"
+            },
+            body: JSON.stringify({ data: vObj })
+          });
+          if (res.ok) {
+            await fetchVehiclesFromSupabase();
+            return true;
+          }
+        }
+      } catch (err) {
+        console.error("Error guardando vehículo:", err);
+      }
+      return false;
+    }
+
+    async function deleteVehicleFromSupabase(db_id) {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/vehiculos?id=eq.${db_id}`, {
+          method: "DELETE",
+          headers: {
+            "apikey": SUPABASE_KEY,
+            "Authorization": `Bearer ${SUPABASE_KEY}`
+          }
+        });
+        if (res.ok) {
+          await fetchVehiclesFromSupabase();
+          return true;
+        }
+      } catch (err) {
+        console.error("Error eliminando de Supabase:", err);
+      }
+      return false;
+    }
 
     function saveConfigState() {
       localStorage.setItem('ag_config_data', JSON.stringify(config));
@@ -462,50 +554,6 @@
     function openGoogleMaps() {
       const query = encodeURIComponent(config.address);
       window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
-    }
-
-    const defaultVehicles = [
-      {
-        id: "c1", type: "Camioneta", brand: "RAM", model: "1500", year: 2020, version: "5.7 Laramie Atx V8",
-        km: "100.000 km", price: "$ 48.000.000", fuel: "Nafta", transmission: "Automática", doors: "4",
-        engineLiters: "5.7", bodyType: "Pick-Up", color: "Negro", status: "Disponible",
-        images: ["https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=800&q=80"],
-        desc: "RAM 1500 Laramie V8 en impecable estado. Potencia y lujo al máximo.",
-        abs: "Sí", frontGuard: "Sí", airbag: "Sí", autoLights: "Sí", parkingSensor: "Sí", dualAirbag: "Sí",
-        rearFogLights: "Sí", rearDefroster: "Sí", stabilityCtrl: "Sí", ledBrake: "Sí",
-        centralLock: "Sí", asr: "Sí", backupCam: "Sí", alloys: "Sí", sunroof: "Sí",
-        spareSupport: "Sí", rearWiper: "Sí", roofRack: "Sí", traction: "4x4", capacity: "5",
-        power: "395 hp", wheelbase: "3.797 mm", tankCap: "98 L", valves: "2",
-        autopilot: "Sí", aircon: "Sí", onboardComp: "Sí", powerWindows: "Sí",
-        rainSensor: "Sí", trunkRelease: "Sí", steeringRemote: "Sí", cupholders: "Sí",
-        climate: "Sí", autoGlass: "Sí", amfm: "Sí", aux: "Sí", bluetooth: "Sí", cd: "Sí", dvd: "Sí", mp3: "Sí", usb: "Sí"
-      },
-      {
-        id: "m1", type: "Moto", brand: "Yamaha", model: "XTZ 250", year: 2026, version: "Enduro",
-        km: "0 km", price: "$ 14.500.000", fuel: "Nafta", transmission: "Manual", doors: "-",
-        engineLiters: "250 cc", bodyType: "Enduro", color: "Rojo", status: "Disponible",
-        images: ["https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=800&q=80"],
-        desc: "Yamaha XTZ 250 0km. Impecable estado.",
-        motoType: "Enduro", power: "20,4 hp", uniqueOwner: "Sí", engineType: "4 tiempos",
-        speeds: "6", gps: "No", abs: "ABS", alarm: "No", tradeIn: "Sí", negotiable: "Sí"
-      }
-    ];
-
-    let vehicles = JSON.parse(localStorage.getItem('ag_vehicles_data')) || defaultVehicles;
-    let selectedVehicle = null;
-    let currentAdminTab = 'stock';
-    let tempUploadImages = [];
-
-    function saveVehiclesState() {
-      try {
-        localStorage.setItem('ag_vehicles_data', JSON.stringify(vehicles));
-        renderShowroom();
-        renderHeroSlider();
-        return true;
-      } catch (e) {
-        alert("⚠️ Las imágenes seleccionadas son demasiado pesadas o son demasiadas para la memoria del navegador. Intenta subir menos fotos a la vez o usa imágenes de menor peso.");
-        return false;
-      }
     }
 
     function switchInterface(interfaceId) {
@@ -564,7 +612,7 @@
 
       const nextIndex = (activeIndex + 1) % slides.length;
       slides[nextIndex].classList.add('active');
-    }, 4000);
+    }, 5000);
 
     function renderShowroom() {
       const grid = document.getElementById('showroomGrid');
@@ -802,7 +850,7 @@
 
     function sendWhatsAppVehicle() {
       if (!selectedVehicle) return;
-      const msg = `Hola! Quisiera consultar disponibilidad por el *${selectedVehicle.brand} ${selectedVehicle.model}* (${selectedVehicle.year}) a ${selectedVehicle.price}.`;
+      const msg = `Hola! Quisiera consultar disponibilidad por el ${selectedVehicle.brand} ${selectedVehicle.model} (${selectedVehicle.year}) a ${selectedVehicle.price}.`;
       window.open(`https://wa.me/5493804374962?text=${encodeURIComponent(msg)}`, '_blank');
     }
 
@@ -813,9 +861,7 @@
       const s = document.getElementById('tradeState').value;
       if (!b) return alert("Ingresá al menos la marca y modelo.");
       
-      // Mensaje plano sin asteriscos ni guiones molestos para que no falle en WhatsApp
       const msg = `Hola! Quisiera cotizar mi vehículo para permuta:\nUnidad: ${b}\nAño: ${y}\nKM: ${k}\nEstado: ${s}`;
-      
       window.open(`https://wa.me/5493804374962?text=${encodeURIComponent(msg)}`, '_blank');
     }
 
@@ -848,7 +894,7 @@
       if (currentAdminTab === 'stock') {
         vehicles.forEach((v, vIdx) => {
           let photosHTML = '';
-          v.images.forEach((img, imgIdx) => {
+          (v.images || []).forEach((img, imgIdx) => {
             photosHTML += `
               <div class="admin-photo-thumb">
                 <img src="${img}">
@@ -918,7 +964,7 @@
               <textarea id="add-desc" class="control-input" style="height:90px;" placeholder="Descripción completa..."></textarea>
             </div>
 
-            <button class="btn-gold" style="width:100%; padding:14px; font-size:1rem;" onclick="saveNewCar()">Publicar Producto</button>
+            <button class="btn-gold" style="width:100%; padding:14px; font-size:1rem;" onclick="saveNewCar()">Publicar Producto en la Nube</button>
           </div>
         `;
         toggleAddFields('Auto');
@@ -1080,7 +1126,7 @@
             <textarea id="edit-desc" class="control-input" style="height:90px;">${v.desc || ''}</textarea>
           </div>
 
-          <button class="btn-gold" style="width:100%; padding:14px; font-size:1rem;" onclick="saveEditedCar(${vIdx})">💾 Guardar Todos los Cambios</button>
+          <button class="btn-gold" style="width:100%; padding:14px; font-size:1rem;" onclick="saveEditedCar(${vIdx})">💾 Guardar Todos los Cambios en Supabase</button>
         </div>
       `;
       toggleEditFields(v.type || 'Auto', v);
@@ -1172,93 +1218,103 @@
       }
     }
 
-    function saveEditedCar(vIdx) {
+    async function saveEditedCar(vIdx) {
       const type = document.getElementById('edit-type').value;
-      vehicles[vIdx].id = document.getElementById('edit-id').value;
-      vehicles[vIdx].type = type;
-      vehicles[vIdx].brand = document.getElementById('edit-brand').value;
-      vehicles[vIdx].model = document.getElementById('edit-model').value;
-      vehicles[vIdx].year = document.getElementById('edit-year').value;
-      vehicles[vIdx].km = document.getElementById('edit-km').value;
-      vehicles[vIdx].price = document.getElementById('edit-price').value;
-      vehicles[vIdx].color = document.getElementById('edit-color').value;
+      let targetCar = vehicles[vIdx];
+
+      targetCar.id = document.getElementById('edit-id').value;
+      targetCar.type = type;
+      targetCar.brand = document.getElementById('edit-brand').value;
+      targetCar.model = document.getElementById('edit-model').value;
+      targetCar.year = document.getElementById('edit-year').value;
+      targetCar.km = document.getElementById('edit-km').value;
+      targetCar.price = document.getElementById('edit-price').value;
+      targetCar.color = document.getElementById('edit-color').value;
 
       if (type === 'Moto') {
-        vehicles[vIdx].motoType = document.getElementById('edit-motoType')?.value || "Enduro";
-        vehicles[vIdx].engineLiters = document.getElementById('edit-engine')?.value || "250 cc";
-        vehicles[vIdx].engineType = document.getElementById('edit-engineType')?.value || "4 tiempos";
-        vehicles[vIdx].power = document.getElementById('edit-power')?.value || "20,4 hp";
+        targetCar.motoType = document.getElementById('edit-motoType')?.value || "Enduro";
+        targetCar.engineLiters = document.getElementById('edit-engine')?.value || "250 cc";
+        targetCar.engineType = document.getElementById('edit-engineType')?.value || "4 tiempos";
+        targetCar.power = document.getElementById('edit-power')?.value || "20,4 hp";
       } else {
-        vehicles[vIdx].fuel = document.getElementById('edit-fuel')?.value || "Nafta";
-        vehicles[vIdx].transmission = document.getElementById('edit-trans')?.value || "Automática";
-        vehicles[vIdx].engineLiters = document.getElementById('edit-engine')?.value || "2.0";
-        vehicles[vIdx].bodyType = document.getElementById('edit-body')?.value || "Sedán";
+        targetCar.fuel = document.getElementById('edit-fuel')?.value || "Nafta";
+        targetCar.transmission = document.getElementById('edit-trans')?.value || "Automática";
+        targetCar.engineLiters = document.getElementById('edit-engine')?.value || "2.0";
+        targetCar.bodyType = document.getElementById('edit-body')?.value || "Sedán";
 
-        vehicles[vIdx].abs = document.getElementById('edit-abs')?.value || "Sí";
-        vehicles[vIdx].frontGuard = document.getElementById('edit-frontGuard')?.value || "Sí";
-        vehicles[vIdx].airbag = document.getElementById('edit-airbag')?.value || "Sí";
-        vehicles[vIdx].autoLights = document.getElementById('edit-autoLights')?.value || "Sí";
-        vehicles[vIdx].parkingSensor = document.getElementById('edit-parkingSensor')?.value || "Sí";
-        vehicles[vIdx].dualAirbag = document.getElementById('edit-dualAirbag')?.value || "Sí";
-        vehicles[vIdx].rearFogLights = document.getElementById('edit-rearFogLights')?.value || "Sí";
-        vehicles[vIdx].rearDefroster = document.getElementById('edit-rearDefroster')?.value || "Sí";
-        vehicles[vIdx].stabilityCtrl = document.getElementById('edit-stabilityCtrl')?.value || "Sí";
-        vehicles[vIdx].ledBrake = document.getElementById('edit-ledBrake')?.value || "Sí";
-        vehicles[vIdx].centralLock = document.getElementById('edit-centralLock')?.value || "Sí";
-        vehicles[vIdx].asr = document.getElementById('edit-asr')?.value || "Sí";
+        targetCar.abs = document.getElementById('edit-abs')?.value || "Sí";
+        targetCar.frontGuard = document.getElementById('edit-frontGuard')?.value || "Sí";
+        targetCar.airbag = document.getElementById('edit-airbag')?.value || "Sí";
+        targetCar.autoLights = document.getElementById('edit-autoLights')?.value || "Sí";
+        targetCar.parkingSensor = document.getElementById('edit-parkingSensor')?.value || "Sí";
+        targetCar.dualAirbag = document.getElementById('edit-dualAirbag')?.value || "Sí";
+        targetCar.rearFogLights = document.getElementById('edit-rearFogLights')?.value || "Sí";
+        targetCar.rearDefroster = document.getElementById('edit-rearDefroster')?.value || "Sí";
+        targetCar.stabilityCtrl = document.getElementById('edit-stabilityCtrl')?.value || "Sí";
+        targetCar.ledBrake = document.getElementById('edit-ledBrake')?.value || "Sí";
+        targetCar.centralLock = document.getElementById('edit-centralLock')?.value || "Sí";
+        targetCar.asr = document.getElementById('edit-asr')?.value || "Sí";
 
-        vehicles[vIdx].traction = document.getElementById('edit-traction')?.value || "Delantera";
-        vehicles[vIdx].capacity = document.getElementById('edit-capacity')?.value || "5";
-        vehicles[vIdx].power = document.getElementById('edit-power')?.value || "150 hp";
-        vehicles[vIdx].wheelbase = document.getElementById('edit-wheelbase')?.value || "2.650 mm";
-        vehicles[vIdx].tankCap = document.getElementById('edit-tankCap')?.value || "55 L";
-        vehicles[vIdx].valves = document.getElementById('edit-valves')?.value || "4";
+        targetCar.traction = document.getElementById('edit-traction')?.value || "Delantera";
+        targetCar.capacity = document.getElementById('edit-capacity')?.value || "5";
+        targetCar.power = document.getElementById('edit-power')?.value || "150 hp";
+        targetCar.wheelbase = document.getElementById('edit-wheelbase')?.value || "2.650 mm";
+        targetCar.tankCap = document.getElementById('edit-tankCap')?.value || "55 L";
+        targetCar.valves = document.getElementById('edit-valves')?.value || "4";
 
-        vehicles[vIdx].alloys = document.getElementById('edit-alloys')?.value || "Sí";
-        vehicles[vIdx].sunroof = document.getElementById('edit-sunroof')?.value || "Sí";
-        vehicles[vIdx].spareSupport = document.getElementById('edit-spareSupport')?.value || "Sí";
-        vehicles[vIdx].rearWiper = document.getElementById('edit-rearWiper')?.value || "Sí";
-        vehicles[vIdx].roofRack = document.getElementById('edit-roofRack')?.value || "Sí";
+        targetCar.alloys = document.getElementById('edit-alloys')?.value || "Sí";
+        targetCar.sunroof = document.getElementById('edit-sunroof')?.value || "Sí";
+        targetCar.spareSupport = document.getElementById('edit-spareSupport')?.value || "Sí";
+        targetCar.rearWiper = document.getElementById('edit-rearWiper')?.value || "Sí";
+        targetCar.roofRack = document.getElementById('edit-roofRack')?.value || "Sí";
 
-        vehicles[vIdx].autopilot = document.getElementById('edit-autopilot')?.value || "Sí";
-        vehicles[vIdx].aircon = document.getElementById('edit-aircon')?.value || "Sí";
-        vehicles[vIdx].onboardComp = document.getElementById('edit-onboardComp')?.value || "Sí";
-        vehicles[vIdx].powerWindows = document.getElementById('edit-powerWindows')?.value || "Sí";
-        vehicles[vIdx].rainSensor = document.getElementById('edit-rainSensor')?.value || "Sí";
-        vehicles[vIdx].trunkRelease = document.getElementById('edit-trunkRelease')?.value || "Sí";
-        vehicles[vIdx].steeringRemote = document.getElementById('edit-steeringRemote')?.value || "Sí";
-        vehicles[vIdx].cupholders = document.getElementById('edit-cupholders')?.value || "Sí";
-        vehicles[vIdx].climate = document.getElementById('edit-climate')?.value || "Sí";
-        vehicles[vIdx].autoGlass = document.getElementById('edit-autoGlass')?.value || "Sí";
+        targetCar.autopilot = document.getElementById('edit-autopilot')?.value || "Sí";
+        targetCar.aircon = document.getElementById('edit-aircon')?.value || "Sí";
+        targetCar.onboardComp = document.getElementById('edit-onboardComp')?.value || "Sí";
+        targetCar.powerWindows = document.getElementById('edit-powerWindows')?.value || "Sí";
+        targetCar.rainSensor = document.getElementById('edit-rainSensor')?.value || "Sí";
+        targetCar.trunkRelease = document.getElementById('edit-trunkRelease')?.value || "Sí";
+        targetCar.steeringRemote = document.getElementById('edit-steeringRemote')?.value || "Sí";
+        targetCar.cupholders = document.getElementById('edit-cupholders')?.value || "Sí";
+        targetCar.climate = document.getElementById('edit-climate')?.value || "Sí";
+        targetCar.autoGlass = document.getElementById('edit-autoGlass')?.value || "Sí";
 
-        vehicles[vIdx].amfm = document.getElementById('edit-amfm')?.value || "Sí";
-        vehicles[vIdx].aux = document.getElementById('edit-aux')?.value || "Sí";
-        vehicles[vIdx].bluetooth = document.getElementById('edit-bluetooth')?.value || "Sí";
-        vehicles[vIdx].cd = document.getElementById('edit-cd')?.value || "Sí";
-        vehicles[vIdx].dvd = document.getElementById('edit-dvd')?.value || "Sí";
-        vehicles[vIdx].mp3 = document.getElementById('edit-mp3')?.value || "Sí";
-        vehicles[vIdx].usb = document.getElementById('edit-usb')?.value || "Sí";
+        targetCar.amfm = document.getElementById('edit-amfm')?.value || "Sí";
+        targetCar.aux = document.getElementById('edit-aux')?.value || "Sí";
+        targetCar.bluetooth = document.getElementById('edit-bluetooth')?.value || "Sí";
+        targetCar.cd = document.getElementById('edit-cd')?.value || "Sí";
+        targetCar.dvd = document.getElementById('edit-dvd')?.value || "Sí";
+        targetCar.mp3 = document.getElementById('edit-mp3')?.value || "Sí";
+        targetCar.usb = document.getElementById('edit-usb')?.value || "Sí";
       }
 
-      vehicles[vIdx].desc = document.getElementById('edit-desc').value;
+      targetCar.desc = document.getElementById('edit-desc').value;
 
-      if(saveVehiclesState()) {
-        alert("✅ Ficha actualizada correctamente.");
+      const ok = await saveVehicleToSupabase(targetCar);
+      if(ok) {
+        alert("✅ Ficha actualizada correctamente en la nube.");
+        await fetchVehiclesFromSupabase();
         switchAdminTab('stock', document.getElementById('tab-stock'));
+      } else {
+        alert("⚠️ Hubo un error al guardar en la nube.");
       }
     }
 
-    function deleteVehicle(vIdx) {
+    async function deleteVehicle(vIdx) {
       if (confirm("¿Estás seguro de eliminar este elemento?")) {
-        vehicles.splice(vIdx, 1);
-        saveVehiclesState();
+        const v = vehicles[vIdx];
+        if (v.db_id) {
+          await deleteVehicleFromSupabase(v.db_id);
+        } else {
+          vehicles.splice(vIdx, 1);
+        }
         renderAdminContent();
       }
     }
 
-    function deleteCarImage(vIdx, imgIdx) {
+    async function deleteCarImage(vIdx, imgIdx) {
       vehicles[vIdx].images.splice(imgIdx, 1);
-      saveVehiclesState();
+      await saveVehicleToSupabase(vehicles[vIdx]);
       renderAdminContent();
     }
 
@@ -1266,11 +1322,10 @@
       const file = input.files[0];
       if (file) {
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
           vehicles[vIdx].images.push(e.target.result);
-          if(saveVehiclesState()) {
-            renderAdminContent();
-          }
+          await saveVehicleToSupabase(vehicles[vIdx]);
+          renderAdminContent();
         };
         reader.readAsDataURL(file);
       }
@@ -1320,7 +1375,7 @@
       });
     }
 
-    function saveNewCar() {
+    async function saveNewCar() {
       const brand = document.getElementById('add-brand').value;
       const model = document.getElementById('add-model').value;
       const price = document.getElementById('add-price').value;
@@ -1401,10 +1456,12 @@
         newObj.usb = document.getElementById('add-usb')?.value || "Sí";
       }
 
-      vehicles.push(newObj);
-      if(saveVehiclesState()) {
-        alert("✅ Producto publicado con éxito.");
+      const ok = await saveVehicleToSupabase(newObj);
+      if(ok) {
+        alert("✅ Producto publicado con éxito en la nube.");
         switchAdminTab('stock', document.getElementById('tab-stock'));
+      } else {
+        alert("⚠️ Hubo un error al publicar en la nube.");
       }
     }
 
@@ -1420,8 +1477,7 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       applyConfigUI();
-      renderHeroSlider();
-      renderShowroom();
+      fetchVehiclesFromSupabase();
     });
   </script>
 </body>
