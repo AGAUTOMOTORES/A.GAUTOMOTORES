@@ -666,7 +666,7 @@
       if (e.target.id === 'lightboxModal') closeLightbox();
     });
 
-    /* SINCRONIZACIÓN DE CONFIGURACIÓN CON SUPABASE CON FALLBACK A LOCALSTORAGE */
+    /* SINCRONIZACIÓN AUTOMÁTICA DE CONFIGURACIÓN CON SUPABASE */
     async function fetchConfigFromSupabase() {
       try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/configuracion?id=eq.1&select=*`, {
@@ -680,6 +680,18 @@
           if (data && data.length > 0 && data[0].data) {
             config = data[0].data;
             localStorage.setItem('ag_config_data', JSON.stringify(config));
+          } else {
+            // Si la tabla está vacía, creamos la fila inicial automáticamente con ID 1
+            await fetch(`${SUPABASE_URL}/rest/v1/configuracion`, {
+              method: "POST",
+              headers: {
+                "apikey": SUPABASE_KEY,
+                "Authorization": `Bearer ${SUPABASE_KEY}`,
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal"
+              },
+              body: JSON.stringify({ id: 1, data: defaultConfig })
+            });
           }
         }
       } catch (err) {
@@ -697,7 +709,8 @@
       renderHeroSlider();
 
       try {
-        await fetch(`${SUPABASE_URL}/rest/v1/configuracion?id=eq.1`, {
+        // Intentamos actualizar la fila 1
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/configuracion?id=eq.1`, {
           method: "PATCH",
           headers: {
             "apikey": SUPABASE_KEY,
@@ -707,6 +720,20 @@
           },
           body: JSON.stringify({ data: config })
         });
+
+        // Si no existe la fila 1 en Supabase, la insertamos directamente
+        if (!res.ok) {
+          await fetch(`${SUPABASE_URL}/rest/v1/configuracion`, {
+            method: "POST",
+            headers: {
+              "apikey": SUPABASE_KEY,
+              "Authorization": `Bearer ${SUPABASE_KEY}`,
+              "Content-Type": "application/json",
+              "Prefer": "return=minimal"
+            },
+            body: JSON.stringify({ id: 1, data: config })
+          });
+        }
       } catch (err) {
         console.error("Error guardando la configuración en Supabase:", err);
       }
@@ -1687,7 +1714,7 @@
       config.phone = document.getElementById('cfg-phone').value;
       config.instagram = document.getElementById('cfg-insta').value;
       await saveConfigState();
-      alert("✅ Configuración guardada correctamente.");
+      alert("✅ Configuración guardada correctamente en la nube.");
     }
 
     document.addEventListener('DOMContentLoaded', () => {
