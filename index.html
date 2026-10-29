@@ -335,6 +335,7 @@
               <option value="Auto">Autos</option>
               <option value="Camioneta">Camionetas</option>
               <option value="Moto">Motos</option>
+              <option value="Competicion">Competición</option>
             </select>
           </div>
           <div class="control-field">
@@ -453,7 +454,7 @@
               </div>
             </div>
             <div style="margin-top:12px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.06); font-size:0.75rem; color:var(--accent-gold); font-weight:700;">
-              ✓ Modelos 2016 en adelante
+              ✓ Todos Los Modelos
             </div>
           </div>
 
@@ -681,7 +682,6 @@
             config = data[0].data;
             localStorage.setItem('ag_config_data', JSON.stringify(config));
           } else {
-            // Si la tabla está vacía, creamos la fila inicial automáticamente con ID 1
             await fetch(`${SUPABASE_URL}/rest/v1/configuracion`, {
               method: "POST",
               headers: {
@@ -709,7 +709,6 @@
       renderHeroSlider();
 
       try {
-        // Intentamos actualizar la fila 1
         const res = await fetch(`${SUPABASE_URL}/rest/v1/configuracion?id=eq.1`, {
           method: "PATCH",
           headers: {
@@ -721,7 +720,6 @@
           body: JSON.stringify({ data: config })
         });
 
-        // Si no existe la fila 1 en Supabase, la insertamos directamente
         if (!res.ok) {
           await fetch(`${SUPABASE_URL}/rest/v1/configuracion`, {
             method: "POST",
@@ -864,7 +862,7 @@
           <div class="slide-content">
             <span style="background:var(--accent-gold); color:#000; font-size:0.68rem; font-weight:800; padding:3px 8px; border-radius:4px; text-transform:uppercase; letter-spacing:0.05em;">Destacado</span>
             <h1 style="font-size:1.8rem; color:#fff; margin:6px 0;">${v.brand} ${v.model}</h1>
-            <p style="color:var(--text-secondary); margin-bottom:12px; font-size:0.85rem;">Año ${v.year} · ${v.km} · ${v.price}</p>
+            <p style="color:var(--text-secondary); margin-bottom:12px; font-size:0.85rem;">${v.type === 'Competicion' ? ('Competición · ' + v.price) : ('Año ' + v.year + ' · ' + v.km + ' · ' + v.price)}</p>
             <button class="btn-gold" style="padding:8px 14px; font-size:0.8rem;" onclick="openVehicleDetail('${v.id}')">Ver Ficha ↗</button>
           </div>
         `;
@@ -909,8 +907,8 @@
               <span class="vehicle-brand">${v.brand}</span>
               <h3 class="vehicle-name">${v.model}</h3>
               <div class="specs-chips">
-                <span class="chip">${v.year}</span>
-                <span class="chip">${v.engineLiters || '1.6'}</span>
+                <span class="chip">${v.type === 'Competicion' ? (v.fuel || 'Nafta') : v.year}</span>
+                <span class="chip">${v.type === 'Competicion' ? (v.transmission || 'Manual') : (v.engineLiters || '1.6')}</span>
               </div>
             </div>
             <div class="vehicle-footer">
@@ -946,9 +944,22 @@
 
       currentImageIndex = 0;
       document.getElementById('detailTitle').textContent = `${selectedVehicle.brand} ${selectedVehicle.model}`;
-      document.getElementById('detailYearKm').textContent = `${selectedVehicle.year} | ${selectedVehicle.km}`;
+      
+      if (selectedVehicle.type === 'Competicion') {
+        document.getElementById('detailYearKm').textContent = `Competición | ${selectedVehicle.fuel || 'Nafta'} - ${selectedVehicle.transmission || 'Manual'}`;
+      } else {
+        document.getElementById('detailYearKm').textContent = `${selectedVehicle.year} | ${selectedVehicle.km}`;
+      }
+
       document.getElementById('detailPrice').textContent = selectedVehicle.price;
       document.getElementById('detailDesc').textContent = selectedVehicle.desc || 'Sin descripción adicional.';
+
+      const accordionContainer = document.getElementById('accordionContainer');
+      if (selectedVehicle.type === 'Competicion') {
+        if (accordionContainer) accordionContainer.style.display = 'none';
+      } else {
+        if (accordionContainer) accordionContainer.style.display = 'block';
+      }
 
       document.getElementById('accordionBody').classList.remove('open');
       document.getElementById('accordionToggle').classList.remove('open');
@@ -971,7 +982,17 @@
         thumbs.appendChild(thumb);
       });
 
-      if (selectedVehicle.type === 'Moto') {
+      if (selectedVehicle.type === 'Competicion') {
+        document.getElementById('mainSpecsGrid').innerHTML = `
+          <div class="main-spec-box"><span class="main-spec-title">Tipo</span><span class="main-spec-val">Competición</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">ID</span><span class="main-spec-val">${selectedVehicle.id}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Marca</span><span class="main-spec-val">${selectedVehicle.brand}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Modelo</span><span class="main-spec-val">${selectedVehicle.model}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Versión</span><span class="main-spec-val">${selectedVehicle.version || 'N/D'}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Combustible</span><span class="main-spec-val">${selectedVehicle.fuel || 'Nafta'}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Transmisión</span><span class="main-spec-val">${selectedVehicle.transmission || 'Manual'}</span></div>
+        `;
+      } else if (selectedVehicle.type === 'Moto') {
         document.getElementById('mainSpecsGrid').innerHTML = `
           <div class="main-spec-box"><span class="main-spec-title">Tipo</span><span class="main-spec-val">Moto</span></div>
           <div class="main-spec-box"><span class="main-spec-title">Marca</span><span class="main-spec-val">${selectedVehicle.brand}</span></div>
@@ -1109,7 +1130,7 @@
     function sendWhatsAppVehicle() {
       if (!selectedVehicle) return;
       const cleanPhone = (config.phone || "5493804374962").replace(/\D/g, '');
-      const msg = `Hola! Quisiera consultar disponibilidad por el ${selectedVehicle.brand} ${selectedVehicle.model} (${selectedVehicle.year}) a ${selectedVehicle.price}.`;
+      const msg = `Hola! Quisiera consultar disponibilidad por el ${selectedVehicle.brand} ${selectedVehicle.model} a ${selectedVehicle.price}.`;
       window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
     }
 
@@ -1167,7 +1188,7 @@
           card.style.cssText = "background:var(--bg-card); padding:15px; border-radius:10px; border:1px solid var(--border-color); margin-bottom:12px;";
           card.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
-              <strong style="color:var(--accent-gold); font-size:0.95rem;">[${v.type || 'Auto'}] ${v.brand} ${v.model} (${v.year}) - ${v.price} (ID: ${v.id})</strong>
+              <strong style="color:var(--accent-gold); font-size:0.95rem;">[${v.type || 'Auto'}] ${v.brand} ${v.model} - ${v.price} (ID: ${v.id})</strong>
               <div style="display:flex; gap:6px;">
                 <button class="btn-outline-gold" style="padding:6px 12px; font-size:0.78rem;" onclick="openEditModal(${vIdx})">✏️ Editar Ficha</button>
                 <button style="background:var(--danger); color:#fff; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:600; font-size:0.78rem;" onclick="deleteVehicle(${vIdx})">Borrar</button>
@@ -1193,6 +1214,7 @@
                 <option value="Auto">Auto</option>
                 <option value="Camioneta">Camioneta</option>
                 <option value="Moto">Moto</option>
+                <option value="Competicion">Competición</option>
               </select>
             </div>
 
@@ -1200,13 +1222,6 @@
               <div><label style="font-size:0.7rem; color:var(--text-secondary)">ID Corto</label><input id="add-id" class="control-input" placeholder="a1"></div>
               <div><label style="font-size:0.7rem; color:var(--text-secondary)">Marca</label><input id="add-brand" class="control-input" placeholder="Ej: Renault"></div>
               <div><label style="font-size:0.7rem; color:var(--text-secondary)">Modelo</label><input id="add-model" class="control-input" placeholder="Ej: Fluence"></div>
-              <div><label style="font-size:0.7rem; color:var(--text-secondary)">Año</label><input id="add-year" class="control-input" placeholder="2013"></div>
-            </div>
-
-            <div class="form-grid-4">
-              <div><label style="font-size:0.7rem; color:var(--text-secondary)">Versión</label><input id="add-version" class="control-input" placeholder="2.0 16v"></div>
-              <div><label style="font-size:0.7rem; color:var(--text-secondary)">Color</label><input id="add-color" class="control-input" placeholder="Gris Plata"></div>
-              <div><label style="font-size:0.7rem; color:var(--text-secondary)">Kilómetros</label><input id="add-km" class="control-input" placeholder="120.000 km"></div>
               <div><label style="font-size:0.7rem; color:var(--text-secondary)">Precio</label><input id="add-price" class="control-input" placeholder="$ 13.500.000"></div>
             </div>
 
@@ -1263,8 +1278,22 @@
       const container = document.getElementById('dynamicFieldsContainer');
       if (!container) return;
 
-      if (type === 'Moto') {
+      if (type === 'Competicion') {
         container.innerHTML = `
+          <div class="form-grid-4">
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Versión</label><input id="add-version" class="control-input" value="${vData?.version || ''}" placeholder="Ej: Fase 2"></div>
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Combustible</label><input id="add-fuel" class="control-input" value="${vData?.fuel || 'Nafta'}"></div>
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Transmisión</label><input id="add-trans" class="control-input" value="${vData?.transmission || 'Manual'}"></div>
+          </div>
+        `;
+      } else if (type === 'Moto') {
+        container.innerHTML = `
+          <div class="form-grid-4">
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Año</label><input id="add-year" class="control-input" value="${vData?.year || '2020'}"></div>
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Versión</label><input id="add-version" class="control-input" value="${vData?.version || ''}"></div>
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Color</label><input id="add-color" class="control-input" value="${vData?.color || 'Gris'}"></div>
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Kilómetros</label><input id="add-km" class="control-input" value="${vData?.km || '0 km'}"></div>
+          </div>
           <h4 style="color:#fff; margin-bottom:10px; font-size:0.85rem; border-bottom:1px solid var(--border-color); padding-bottom:4px;">Ficha Técnica Específica para Moto</h4>
           <div class="form-grid-4">
             <div><label style="font-size:0.7rem; color:var(--text-secondary)">Tipo de moto</label><input id="add-motoType" class="control-input" value="${vData?.motoType || 'Enduro'}"></div>
@@ -1272,15 +1301,15 @@
             <div><label style="font-size:0.7rem; color:var(--text-secondary)">Motor</label><input id="add-engineType" class="control-input" value="${vData?.engineType || '4 tiempos'}"></div>
             <div><label style="font-size:0.7rem; color:var(--text-secondary)">Potencia</label><input id="add-power" class="control-input" value="${vData?.power || '20,4 hp'}"></div>
           </div>
-          <div class="form-grid-4">
-            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Velocidades</label><input id="add-speeds" class="control-input" value="${vData?.speeds || '6'}"></div>
-            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Transmisión</label><input id="add-trans" class="control-input" value="${vData?.transmission || 'Manual'}"></div>
-            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Frenos</label><input id="add-abs" class="control-input" value="${vData?.abs || 'ABS'}"></div>
-            <div><label style="font-size:0.7rem; color:var(--text-secondary)">GPS</label><input id="add-gps" class="control-input" value="${vData?.gps || 'No'}"></div>
-          </div>
         `;
       } else {
         container.innerHTML = `
+          <div class="form-grid-4">
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Año</label><input id="add-year" class="control-input" value="${vData?.year || '2020'}"></div>
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Versión</label><input id="add-version" class="control-input" value="${vData?.version || ''}" placeholder="2.0 16v"></div>
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Color</label><input id="add-color" class="control-input" value="${vData?.color || 'Gris Plata'}"></div>
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Kilómetros</label><input id="add-km" class="control-input" value="${vData?.km || '120.000 km'}"></div>
+          </div>
           <div class="form-grid-4">
             <div><label style="font-size:0.7rem; color:var(--text-secondary)">Combustible</label><input id="add-fuel" class="control-input" value="${vData?.fuel || 'Nafta'}"></div>
             <div><label style="font-size:0.7rem; color:var(--text-secondary)">Puertas</label><input id="add-doors" class="control-input" value="${vData?.doors || '4'}"></div>
@@ -1364,16 +1393,13 @@
 
           <div class="form-grid-4">
             <div><label style="font-size:0.7rem; color:var(--text-secondary)">ID Corto</label><input id="edit-id" class="control-input" value="${v.id}"></div>
-            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Tipo</label><select id="edit-type" class="control-select" onchange="toggleEditFields(this.value)"><option value="Auto" ${v.type==='Auto'?'selected':''}>Auto</option><option value="Camioneta" ${v.type==='Camioneta'?'selected':''}>Camioneta</option><option value="Moto" ${v.type==='Moto'?'selected':''}>Moto</option></select></div>
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Tipo</label><select id="edit-type" class="control-select" onchange="toggleEditFields(this.value)"><option value="Auto" ${v.type==='Auto'?'selected':''}>Auto</option><option value="Camioneta" ${v.type==='Camioneta'?'selected':''}>Camioneta</option><option value="Moto" ${v.type==='Moto'?'selected':''}>Moto</option><option value="Competicion" ${v.type==='Competicion'?'selected':''}>Competición</option></select></div>
             <div><label style="font-size:0.7rem; color:var(--text-secondary)">Marca</label><input id="edit-brand" class="control-input" value="${v.brand}"></div>
             <div><label style="font-size:0.7rem; color:var(--text-secondary)">Modelo</label><input id="edit-model" class="control-input" value="${v.model}"></div>
           </div>
 
           <div class="form-grid-4">
-            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Año</label><input id="edit-year" class="control-input" value="${v.year}"></div>
-            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Kilómetros</label><input id="edit-km" class="control-input" value="${v.km}"></div>
             <div><label style="font-size:0.7rem; color:var(--text-secondary)">Precio</label><input id="edit-price" class="control-input" value="${v.price}"></div>
-            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Color</label><input id="edit-color" class="control-input" value="${v.color || ''}"></div>
           </div>
 
           <div id="editDynamicFieldsContainer"></div>
@@ -1393,8 +1419,22 @@
       const container = document.getElementById('editDynamicFieldsContainer');
       if (!container) return;
 
-      if (type === 'Moto') {
+      if (type === 'Competicion') {
         container.innerHTML = `
+          <div class="form-grid-4">
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Versión</label><input id="edit-version" class="control-input" value="${v.version || ''}"></div>
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Combustible</label><input id="edit-fuel" class="control-input" value="${v.fuel || 'Nafta'}"></div>
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Transmisión</label><input id="edit-trans" class="control-input" value="${v.transmission || 'Manual'}"></div>
+          </div>
+        `;
+      } else if (type === 'Moto') {
+        container.innerHTML = `
+          <div class="form-grid-4">
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Año</label><input id="edit-year" class="control-input" value="${v.year || ''}"></div>
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Versión</label><input id="edit-version" class="control-input" value="${v.version || ''}"></div>
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Kilómetros</label><input id="edit-km" class="control-input" value="${v.km || ''}"></div>
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Color</label><input id="edit-color" class="control-input" value="${v.color || ''}"></div>
+          </div>
           <h4 style="color:#fff; margin-bottom:8px; font-size:0.85rem; border-bottom:1px solid var(--border-color); padding-bottom:4px;">Ficha de Moto</h4>
           <div class="form-grid-4">
             <div><label style="font-size:0.7rem; color:var(--text-secondary)">Tipo moto</label><input id="edit-motoType" class="control-input" value="${v.motoType || 'Enduro'}"></div>
@@ -1406,10 +1446,15 @@
       } else {
         container.innerHTML = `
           <div class="form-grid-4">
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Año</label><input id="edit-year" class="control-input" value="${v.year || ''}"></div>
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Versión</label><input id="edit-version" class="control-input" value="${v.version || ''}"></div>
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Kilómetros</label><input id="edit-km" class="control-input" value="${v.km || ''}"></div>
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Color</label><input id="edit-color" class="control-input" value="${v.color || ''}"></div>
+          </div>
+          <div class="form-grid-4">
             <div><label style="font-size:0.7rem; color:var(--text-secondary)">Combustible</label><input id="edit-fuel" class="control-input" value="${v.fuel || 'Nafta'}"></div>
             <div><label style="font-size:0.7rem; color:var(--text-secondary)">Transmisión</label><input id="edit-trans" class="control-input" value="${v.transmission || 'Manual'}"></div>
             <div><label style="font-size:0.7rem; color:var(--text-secondary)">Motor (L)</label><input id="edit-engine" class="control-input" value="${v.engineLiters || '2.0'}"></div>
-            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Carrocería</label><input id="edit-body" class="control-input" value="${v.bodyType || 'Sedán'}"></div>
           </div>
 
           <h4 style="color:#fff; margin-bottom:8px; font-size:0.85rem; border-bottom:1px solid var(--border-color); padding-bottom:4px;">Seguridad</h4>
@@ -1483,66 +1528,75 @@
       targetCar.type = type;
       targetCar.brand = document.getElementById('edit-brand').value;
       targetCar.model = document.getElementById('edit-model').value;
-      targetCar.year = document.getElementById('edit-year').value;
-      targetCar.km = document.getElementById('edit-km').value;
       targetCar.price = document.getElementById('edit-price').value;
-      targetCar.color = document.getElementById('edit-color').value;
+      targetCar.version = document.getElementById('edit-version')?.value || "";
 
-      if (type === 'Moto') {
-        targetCar.motoType = document.getElementById('edit-motoType')?.value || "Enduro";
-        targetCar.engineLiters = document.getElementById('edit-engine')?.value || "250 cc";
-        targetCar.engineType = document.getElementById('edit-engineType')?.value || "4 tiempos";
-        targetCar.power = document.getElementById('edit-power')?.value || "20,4 hp";
-      } else {
+      if (type === 'Competicion') {
         targetCar.fuel = document.getElementById('edit-fuel')?.value || "Nafta";
         targetCar.transmission = document.getElementById('edit-trans')?.value || "Manual";
-        targetCar.engineLiters = document.getElementById('edit-engine')?.value || "2.0";
-        targetCar.bodyType = document.getElementById('edit-body')?.value || "Sedán";
+        targetCar.year = "";
+        targetCar.km = "";
+        targetCar.color = "";
+      } else {
+        targetCar.year = document.getElementById('edit-year')?.value || "2020";
+        targetCar.km = document.getElementById('edit-km')?.value || "0 km";
+        targetCar.color = document.getElementById('edit-color')?.value || "";
 
-        targetCar.abs = document.getElementById('edit-abs')?.value || "Sí";
-        targetCar.frontGuard = document.getElementById('edit-frontGuard')?.value || "No";
-        targetCar.airbag = document.getElementById('edit-airbag')?.value || "Sí";
-        targetCar.autoLights = document.getElementById('edit-autoLights')?.value || "No";
-        targetCar.parkingSensor = document.getElementById('edit-parkingSensor')?.value || "Sí";
-        targetCar.dualAirbag = document.getElementById('edit-dualAirbag')?.value || "Sí";
-        targetCar.rearFogLights = document.getElementById('edit-rearFogLights')?.value || "Sí";
-        targetCar.rearDefroster = document.getElementById('edit-rearDefroster')?.value || "Sí";
-        targetCar.stabilityCtrl = document.getElementById('edit-stabilityCtrl')?.value || "Sí";
-        targetCar.ledBrake = document.getElementById('edit-ledBrake')?.value || "Sí";
-        targetCar.centralLock = document.getElementById('edit-centralLock')?.value || "Sí";
-        targetCar.asr = document.getElementById('edit-asr')?.value || "Sí";
+        if (type === 'Moto') {
+          targetCar.motoType = document.getElementById('edit-motoType')?.value || "Enduro";
+          targetCar.engineLiters = document.getElementById('edit-engine')?.value || "250 cc";
+          targetCar.engineType = document.getElementById('edit-engineType')?.value || "4 tiempos";
+          targetCar.power = document.getElementById('edit-power')?.value || "20,4 hp";
+        } else {
+          targetCar.fuel = document.getElementById('edit-fuel')?.value || "Nafta";
+          targetCar.transmission = document.getElementById('edit-trans')?.value || "Manual";
+          targetCar.engineLiters = document.getElementById('edit-engine')?.value || "2.0";
 
-        targetCar.traction = document.getElementById('edit-traction')?.value || "Delantera";
-        targetCar.capacity = document.getElementById('edit-capacity')?.value || "5";
-        targetCar.power = document.getElementById('edit-power')?.value || "150 hp";
-        targetCar.wheelbase = document.getElementById('edit-wheelbase')?.value || "2.650 mm";
-        targetCar.tankCap = document.getElementById('edit-tankCap')?.value || "55 L";
-        targetCar.valves = document.getElementById('edit-valves')?.value || "4";
+          targetCar.abs = document.getElementById('edit-abs')?.value || "Sí";
+          targetCar.frontGuard = document.getElementById('edit-frontGuard')?.value || "No";
+          targetCar.airbag = document.getElementById('edit-airbag')?.value || "Sí";
+          targetCar.autoLights = document.getElementById('edit-autoLights')?.value || "No";
+          targetCar.parkingSensor = document.getElementById('edit-parkingSensor')?.value || "Sí";
+          targetCar.dualAirbag = document.getElementById('edit-dualAirbag')?.value || "Sí";
+          targetCar.rearFogLights = document.getElementById('edit-rearFogLights')?.value || "Sí";
+          targetCar.rearDefroster = document.getElementById('edit-rearDefroster')?.value || "Sí";
+          targetCar.stabilityCtrl = document.getElementById('edit-stabilityCtrl')?.value || "Sí";
+          targetCar.ledBrake = document.getElementById('edit-ledBrake')?.value || "Sí";
+          targetCar.centralLock = document.getElementById('edit-centralLock')?.value || "Sí";
+          targetCar.asr = document.getElementById('edit-asr')?.value || "Sí";
 
-        targetCar.alloys = document.getElementById('edit-alloys')?.value || "Sí";
-        targetCar.sunroof = document.getElementById('edit-sunroof')?.value || "Sí";
-        targetCar.spareSupport = document.getElementById('edit-spareSupport')?.value || "Sí";
-        targetCar.rearWiper = document.getElementById('edit-rearWiper')?.value || "Sí";
-        targetCar.roofRack = document.getElementById('edit-roofRack')?.value || "Sí";
+          targetCar.traction = document.getElementById('edit-traction')?.value || "Delantera";
+          targetCar.capacity = document.getElementById('edit-capacity')?.value || "5";
+          targetCar.power = document.getElementById('edit-power')?.value || "150 hp";
+          targetCar.wheelbase = document.getElementById('edit-wheelbase')?.value || "2.650 mm";
+          targetCar.tankCap = document.getElementById('edit-tankCap')?.value || "55 L";
+          targetCar.valves = document.getElementById('edit-valves')?.value || "4";
 
-        targetCar.autopilot = document.getElementById('edit-autopilot')?.value || "Sí";
-        targetCar.aircon = document.getElementById('edit-aircon')?.value || "Sí";
-        targetCar.onboardComp = document.getElementById('edit-onboardComp')?.value || "Sí";
-        targetCar.powerWindows = document.getElementById('edit-powerWindows')?.value || "Sí";
-        targetCar.rainSensor = document.getElementById('edit-rainSensor')?.value || "Sí";
-        targetCar.trunkRelease = document.getElementById('edit-trunkRelease')?.value || "Sí";
-        targetCar.steeringRemote = document.getElementById('edit-steeringRemote')?.value || "Sí";
-        targetCar.cupholders = document.getElementById('edit-cupholders')?.value || "Sí";
-        targetCar.climate = document.getElementById('edit-climate')?.value || "Sí";
-        targetCar.autoGlass = document.getElementById('edit-autoGlass')?.value || "Sí";
+          targetCar.alloys = document.getElementById('edit-alloys')?.value || "Sí";
+          targetCar.sunroof = document.getElementById('edit-sunroof')?.value || "Sí";
+          targetCar.spareSupport = document.getElementById('edit-spareSupport')?.value || "Sí";
+          targetCar.rearWiper = document.getElementById('edit-rearWiper')?.value || "Sí";
+          targetCar.roofRack = document.getElementById('edit-roofRack')?.value || "Sí";
 
-        targetCar.amfm = document.getElementById('edit-amfm')?.value || "Sí";
-        targetCar.aux = document.getElementById('edit-aux')?.value || "Sí";
-        targetCar.bluetooth = document.getElementById('edit-bluetooth')?.value || "Sí";
-        targetCar.cd = document.getElementById('edit-cd')?.value || "Sí";
-        targetCar.dvd = document.getElementById('edit-dvd')?.value || "Sí";
-        targetCar.mp3 = document.getElementById('edit-mp3')?.value || "Sí";
-        targetCar.usb = document.getElementById('edit-usb')?.value || "Sí";
+          targetCar.autopilot = document.getElementById('edit-autopilot')?.value || "Sí";
+          targetCar.aircon = document.getElementById('edit-aircon')?.value || "Sí";
+          targetCar.onboardComp = document.getElementById('edit-onboardComp')?.value || "Sí";
+          targetCar.powerWindows = document.getElementById('edit-powerWindows')?.value || "Sí";
+          targetCar.rainSensor = document.getElementById('edit-rainSensor')?.value || "Sí";
+          targetCar.trunkRelease = document.getElementById('edit-trunkRelease')?.value || "Sí";
+          targetCar.steeringRemote = document.getElementById('edit-steeringRemote')?.value || "Sí";
+          targetCar.cupholders = document.getElementById('edit-cupholders')?.value || "Sí";
+          targetCar.climate = document.getElementById('edit-climate')?.value || "Sí";
+          targetCar.autoGlass = document.getElementById('edit-autoGlass')?.value || "Sí";
+
+          targetCar.amfm = document.getElementById('edit-amfm')?.value || "Sí";
+          targetCar.aux = document.getElementById('edit-aux')?.value || "Sí";
+          targetCar.bluetooth = document.getElementById('edit-bluetooth')?.value || "Sí";
+          targetCar.cd = document.getElementById('edit-cd')?.value || "Sí";
+          targetCar.dvd = document.getElementById('edit-dvd')?.value || "Sí";
+          targetCar.mp3 = document.getElementById('edit-mp3')?.value || "Sí";
+          targetCar.usb = document.getElementById('edit-usb')?.value || "Sí";
+        }
       }
 
       targetCar.desc = document.getElementById('edit-desc').value;
@@ -1630,72 +1684,80 @@
       let newObj = {
         id: document.getElementById('add-id').value.trim() || ("v_" + Date.now()),
         type, brand, model,
-        year: document.getElementById('add-year').value || "2020",
-        version: document.getElementById('add-version').value || "",
-        color: document.getElementById('add-color')?.value || "Gris",
-        km: document.getElementById('add-km').value || "0 km",
+        version: document.getElementById('add-version')?.value || "",
         price,
         status: "Disponible",
         images: tempUploadImages.length ? tempUploadImages : ["https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=800&q=80"],
         desc: document.getElementById('add-desc').value
       };
 
-      if (type === 'Moto') {
-        newObj.motoType = document.getElementById('add-motoType')?.value || "Enduro";
-        newObj.engineLiters = document.getElementById('add-engine')?.value || "250 cc";
-        newObj.engineType = document.getElementById('add-engineType')?.value || "4 tiempos";
-        newObj.power = document.getElementById('add-power')?.value || "20,4 hp";
-      } else {
+      if (type === 'Competicion') {
         newObj.fuel = document.getElementById('add-fuel')?.value || "Nafta";
-        newObj.doors = document.getElementById('add-doors')?.value || "4";
         newObj.transmission = document.getElementById('add-trans')?.value || "Manual";
-        newObj.engineLiters = document.getElementById('add-engine')?.value || "2.0";
-        newObj.bodyType = document.getElementById('add-body')?.value || "Sedán";
+        newObj.year = "";
+        newObj.km = "";
+      } else {
+        newObj.year = document.getElementById('add-year')?.value || "2020";
+        newObj.km = document.getElementById('add-km')?.value || "0 km";
+        newObj.color = document.getElementById('add-color')?.value || "Gris";
 
-        newObj.abs = document.getElementById('add-abs')?.value || "Sí";
-        newObj.frontGuard = document.getElementById('add-frontGuard')?.value || "No";
-        newObj.airbag = document.getElementById('add-airbag')?.value || "Sí";
-        newObj.autoLights = document.getElementById('add-autoLights')?.value || "No";
-        newObj.parkingSensor = document.getElementById('add-parkingSensor')?.value || "Sí";
-        newObj.dualAirbag = document.getElementById('add-dualAirbag')?.value || "Sí";
-        newObj.rearFogLights = document.getElementById('add-rearFogLights')?.value || "Sí";
-        newObj.rearDefroster = document.getElementById('add-rearDefroster')?.value || "Sí";
-        newObj.stabilityCtrl = document.getElementById('add-stabilityCtrl')?.value || "Sí";
-        newObj.ledBrake = document.getElementById('add-ledBrake')?.value || "Sí";
-        newObj.centralLock = document.getElementById('add-centralLock')?.value || "Sí";
-        newObj.asr = document.getElementById('add-asr')?.value || "Sí";
+        if (type === 'Moto') {
+          newObj.motoType = document.getElementById('add-motoType')?.value || "Enduro";
+          newObj.engineLiters = document.getElementById('add-engine')?.value || "250 cc";
+          newObj.engineType = document.getElementById('add-engineType')?.value || "4 tiempos";
+          newObj.power = document.getElementById('add-power')?.value || "20,4 hp";
+        } else {
+          newObj.fuel = document.getElementById('add-fuel')?.value || "Nafta";
+          newObj.doors = document.getElementById('add-doors')?.value || "4";
+          newObj.transmission = document.getElementById('add-trans')?.value || "Manual";
+          newObj.engineLiters = document.getElementById('add-engine')?.value || "2.0";
+          newObj.bodyType = document.getElementById('add-body')?.value || "Sedán";
 
-        newObj.traction = document.getElementById('add-traction')?.value || "Delantera";
-        newObj.capacity = document.getElementById('add-capacity')?.value || "5";
-        newObj.power = document.getElementById('add-power')?.value || "150 hp";
-        newObj.wheelbase = document.getElementById('add-wheelbase')?.value || "2.650 mm";
-        newObj.tankCap = document.getElementById('add-tankCap')?.value || "55 L";
-        newObj.valves = document.getElementById('add-valves')?.value || "4";
+          newObj.abs = document.getElementById('add-abs')?.value || "Sí";
+          newObj.frontGuard = document.getElementById('add-frontGuard')?.value || "No";
+          newObj.airbag = document.getElementById('add-airbag')?.value || "Sí";
+          newObj.autoLights = document.getElementById('add-autoLights')?.value || "No";
+          newObj.parkingSensor = document.getElementById('add-parkingSensor')?.value || "Sí";
+          newObj.dualAirbag = document.getElementById('add-dualAirbag')?.value || "Sí";
+          newObj.rearFogLights = document.getElementById('add-rearFogLights')?.value || "Sí";
+          newObj.rearDefroster = document.getElementById('add-rearDefroster')?.value || "Sí";
+          newObj.stabilityCtrl = document.getElementById('add-stabilityCtrl')?.value || "Sí";
+          newObj.ledBrake = document.getElementById('add-ledBrake')?.value || "Sí";
+          newObj.centralLock = document.getElementById('add-centralLock')?.value || "Sí";
+          newObj.asr = document.getElementById('add-asr')?.value || "Sí";
 
-        newObj.alloys = document.getElementById('add-alloys')?.value || "Sí";
-        newObj.sunroof = document.getElementById('add-sunroof')?.value || "Sí";
-        newObj.spareSupport = document.getElementById('add-spareSupport')?.value || "Sí";
-        newObj.rearWiper = document.getElementById('add-rearWiper')?.value || "Sí";
-        newObj.roofRack = document.getElementById('add-roofRack')?.value || "Sí";
+          newObj.traction = document.getElementById('add-traction')?.value || "Delantera";
+          newObj.capacity = document.getElementById('add-capacity')?.value || "5";
+          newObj.power = document.getElementById('add-power')?.value || "150 hp";
+          newObj.wheelbase = document.getElementById('add-wheelbase')?.value || "2.650 mm";
+          newObj.tankCap = document.getElementById('add-tankCap')?.value || "55 L";
+          newObj.valves = document.getElementById('add-valves')?.value || "4";
 
-        newObj.autopilot = document.getElementById('add-autopilot')?.value || "Sí";
-        newObj.aircon = document.getElementById('add-aircon')?.value || "Sí";
-        newObj.onboardComp = document.getElementById('add-onboardComp')?.value || "Sí";
-        newObj.powerWindows = document.getElementById('add-powerWindows')?.value || "Sí";
-        newObj.rainSensor = document.getElementById('add-rainSensor')?.value || "Sí";
-        newObj.trunkRelease = document.getElementById('add-trunkRelease')?.value || "Sí";
-        newObj.steeringRemote = document.getElementById('add-steeringRemote')?.value || "Sí";
-        newObj.cupholders = document.getElementById('add-cupholders')?.value || "Sí";
-        newObj.climate = document.getElementById('add-climate')?.value || "Sí";
-        newObj.autoGlass = document.getElementById('add-autoGlass')?.value || "Sí";
+          newObj.alloys = document.getElementById('add-alloys')?.value || "Sí";
+          newObj.sunroof = document.getElementById('add-sunroof')?.value || "Sí";
+          newObj.spareSupport = document.getElementById('add-spareSupport')?.value || "Sí";
+          newObj.rearWiper = document.getElementById('add-rearWiper')?.value || "Sí";
+          newObj.roofRack = document.getElementById('add-roofRack')?.value || "Sí";
 
-        newObj.amfm = document.getElementById('add-amfm')?.value || "Sí";
-        newObj.aux = document.getElementById('add-aux')?.value || "Sí";
-        newObj.bluetooth = document.getElementById('add-bluetooth')?.value || "Sí";
-        newObj.cd = document.getElementById('add-cd')?.value || "Sí";
-        newObj.dvd = document.getElementById('add-dvd')?.value || "Sí";
-        newObj.mp3 = document.getElementById('add-mp3')?.value || "Sí";
-        newObj.usb = document.getElementById('add-usb')?.value || "Sí";
+          newObj.autopilot = document.getElementById('add-autopilot')?.value || "Sí";
+          newObj.aircon = document.getElementById('add-aircon')?.value || "Sí";
+          newObj.onboardComp = document.getElementById('add-onboardComp')?.value || "Sí";
+          newObj.powerWindows = document.getElementById('add-powerWindows')?.value || "Sí";
+          newObj.rainSensor = document.getElementById('add-rainSensor')?.value || "Sí";
+          newObj.trunkRelease = document.getElementById('add-trunkRelease')?.value || "Sí";
+          newObj.steeringRemote = document.getElementById('add-steeringRemote')?.value || "Sí";
+          newObj.cupholders = document.getElementById('add-cupholders')?.value || "Sí";
+          newObj.climate = document.getElementById('add-climate')?.value || "Sí";
+          newObj.autoGlass = document.getElementById('add-autoGlass')?.value || "Sí";
+
+          newObj.amfm = document.getElementById('add-amfm')?.value || "Sí";
+          newObj.aux = document.getElementById('add-aux')?.value || "Sí";
+          newObj.bluetooth = document.getElementById('add-bluetooth')?.value || "Sí";
+          newObj.cd = document.getElementById('add-cd')?.value || "Sí";
+          newObj.dvd = document.getElementById('add-dvd')?.value || "Sí";
+          newObj.mp3 = document.getElementById('add-mp3')?.value || "Sí";
+          newObj.usb = document.getElementById('add-usb')?.value || "Sí";
+        }
       }
 
       const ok = await saveVehicleToSupabase(newObj);
