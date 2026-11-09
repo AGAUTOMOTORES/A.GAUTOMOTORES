@@ -100,9 +100,9 @@
     .slide-item {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
       background-size: cover; background-position: center; opacity: 0; transition: opacity 0.8s ease-in-out;
-      display: flex; align-items: flex-end; padding: 25px;
+      display: flex; align-items: flex-end; padding: 25px; pointer-events: none;
     }
-    .slide-item.active { opacity: 1; }
+    .slide-item.active { opacity: 1; pointer-events: auto; }
     .slide-overlay { position: absolute; top:0; left:0; width:100%; height:100%; background: linear-gradient(0deg, rgba(7,9,14,0.95) 20%, transparent 80%); }
     .slide-content { position: relative; z-index: 2; max-width: 650px; }
 
@@ -134,7 +134,31 @@
     .vehicle-img-box { height: 120px; position: relative; overflow: hidden; background: #000; }
     .vehicle-img-box img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.4s ease; }
     .vehicle-card:hover .vehicle-img-box img { transform: scale(1.06); }
-    .status-badge { position: absolute; top: 6px; left: 6px; background: rgba(7,9,14,0.85); border: 1px solid var(--accent-gold); color: var(--accent-gold-bright); font-size: 0.58rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; }
+    .status-badge { position: absolute; top: 6px; left: 6px; background: rgba(7,9,14,0.85); border: 1px solid var(--accent-gold); color: var(--accent-gold-bright); font-size: 0.58rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; z-index: 2; }
+    .status-badge.sold { background: rgba(239, 68, 68, 0.92); border-color: #ef4444; color: #fff; }
+
+    /* INTERRUPTOR VENDIDO / DISPONIBLE EN ADMIN */
+    .sold-switch-wrapper {
+      display: inline-flex; align-items: center; gap: 8px; background: var(--bg-main);
+      padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border-color);
+      cursor: pointer; user-select: none;
+    }
+    .sold-switch-input { display: none; }
+    .sold-switch-track {
+      width: 38px; height: 20px; background: rgba(34, 197, 94, 0.25);
+      border: 1px solid var(--whatsapp-green); border-radius: 20px; position: relative; transition: 0.25s;
+    }
+    .sold-switch-thumb {
+      width: 14px; height: 14px; background: var(--whatsapp-green); border-radius: 50%;
+      position: absolute; top: 2px; left: 3px; transition: 0.25s;
+    }
+    .sold-switch-input:checked + .sold-switch-track {
+      background: rgba(239, 68, 68, 0.25); border-color: var(--danger);
+    }
+    .sold-switch-input:checked + .sold-switch-track .sold-switch-thumb {
+      background: var(--danger); transform: translateX(16px);
+    }
+    .sold-switch-text { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
 
     .vehicle-body { padding: 10px; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; }
     .vehicle-brand { color: var(--accent-gold); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
@@ -266,6 +290,8 @@
 
     footer { background: var(--bg-card); border-top: 1px solid var(--border-color); padding: 20px 0; margin-top: auto; font-size: 0.8rem; color: var(--text-secondary); }
     .footer-flex { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .footer-credit { width: 100%; text-align: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.05); font-size: 0.78rem; color: var(--text-secondary); letter-spacing: 0.04em; }
+    .footer-credit strong { color: var(--accent-gold); font-weight: 700; }
 
     @media (max-width: 850px) {
       .nav-links { display: none; }
@@ -376,7 +402,10 @@
 
         <div style="display:flex; flex-direction:column; gap:15px;">
           <div>
-            <span id="detailYearKm" style="color:var(--text-secondary); font-size:0.8rem;">2020 | 100.000 km</span>
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+              <span id="detailStatusBadge" style="font-size:0.68rem; font-weight:700; padding:2px 8px; border-radius:4px; text-transform:uppercase;">Disponible</span>
+              <span id="detailYearKm" style="color:var(--text-secondary); font-size:0.8rem;">2020 | 100.000 km</span>
+            </div>
             <h1 id="detailTitle" style="font-size:1.5rem; color:#fff; margin:4px 0;">RAM 1500</h1>
             <div id="detailPrice" style="font-size:1.8rem; font-weight:800; color:var(--accent-gold-bright)">$ 48.000.000</div>
           </div>
@@ -399,7 +428,7 @@
         <p id="detailDesc" style="color:var(--text-secondary); line-height:1.7; font-size:0.95rem;"></p>
       </div>
 
-      <div class="details-accordion">
+      <div class="details-accordion" id="accordionContainer">
         <div class="accordion-header" id="accordionToggle" onclick="toggleAccordion()">
           <h3>Más detalles técnicos (Ficha completa) ⬇</h3>
           <span class="arrow-icon">▼</span>
@@ -579,11 +608,16 @@
   </div>
 
   <footer>
-    <div class="container footer-flex">
-      <span>© <span id="year"></span> A.G AUTOMOTORES</span>
-      <div>
-        <span id="footer-address-text">La Rioja, Argentina</span>
-        <button style="background:none; border:none; color:var(--text-secondary); margin-left:10px; cursor:pointer;" onclick="openAdminPanel()">⚙️ Admin</button>
+    <div class="container">
+      <div class="footer-flex">
+        <span>© <span id="year"></span> A.G AUTOMOTORES</span>
+        <div>
+          <span id="footer-address-text">La Rioja, Argentina</span>
+          <button style="background:none; border:none; color:var(--text-secondary); margin-left:10px; cursor:pointer;" onclick="openAdminPanel()">⚙️ Admin</button>
+        </div>
+      </div>
+      <div class="footer-credit">
+        Página hecha por <strong>G.A.Center</strong>
       </div>
     </div>
   </footer>
@@ -598,8 +632,7 @@
       address: "Agüero Vera 127, La Rioja, Argentina",
       hours: "Lun-Sáb: 9:00 - 13:00 | 16:30 - 20:30",
       phone: "5493804374962",
-      instagram: "https://www.instagram.com/a.gautomotores/",
-      featuredIds: "a1, a3, c1, c3"
+      instagram: "https://www.instagram.com/a.gautomotores/"
     };
 
     let config = JSON.parse(localStorage.getItem('ag_config_data')) || defaultConfig;
@@ -701,9 +734,6 @@
     }
 
     async function saveConfigState() {
-      if (config.featuredIds) {
-        config.featuredIds = config.featuredIds.replace(/\./g, ',');
-      }
       localStorage.setItem('ag_config_data', JSON.stringify(config));
       applyConfigUI();
       renderHeroSlider();
@@ -772,7 +802,12 @@
             },
             body: JSON.stringify({ data: vObj })
           });
-          return res.ok;
+          if (res.ok) {
+            renderShowroom();
+            renderHeroSlider();
+            return true;
+          }
+          return false;
         } else {
           const res = await fetch(`${SUPABASE_URL}/rest/v1/vehiculos`, {
             method: "POST",
@@ -842,28 +877,28 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
+    /* TODAS LAS PUBLICACIONES EN EL BANNER PRINCIPAL */
     function renderHeroSlider() {
       const sliderContainer = document.getElementById('heroSliderContainer');
-      const fIds = (config.featuredIds || "").split(',').map(s => s.trim()).filter(Boolean);
-      
-      let featuredList = vehicles.filter(v => fIds.includes(v.id));
-      if (featuredList.length === 0 && vehicles.length > 0) {
-        featuredList = [vehicles[0]];
-      }
-
       sliderContainer.innerHTML = '';
-      featuredList.forEach((v, idx) => {
+
+      if (vehicles.length === 0) return;
+
+      vehicles.forEach((v, idx) => {
         const slideImg = v.images && v.images.length ? v.images[0] : 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80';
+        const isSold = v.status === 'Vendido';
         const slideItem = document.createElement('div');
         slideItem.className = `slide-item ${idx === 0 ? 'active' : ''}`;
         slideItem.style.backgroundImage = `url('${slideImg}')`;
         slideItem.innerHTML = `
           <div class="slide-overlay"></div>
           <div class="slide-content">
-            <span style="background:var(--accent-gold); color:#000; font-size:0.68rem; font-weight:800; padding:3px 8px; border-radius:4px; text-transform:uppercase; letter-spacing:0.05em;">Destacado</span>
+            <span style="background:${isSold ? 'var(--danger)' : 'var(--accent-gold)'}; color:${isSold ? '#fff' : '#000'}; font-size:0.68rem; font-weight:800; padding:3px 8px; border-radius:4px; text-transform:uppercase; letter-spacing:0.05em;">
+              ${isSold ? 'VENDIDO' : (v.type || 'Destacado')}
+            </span>
             <h1 style="font-size:1.8rem; color:#fff; margin:6px 0;">${v.brand} ${v.model}</h1>
             <p style="color:var(--text-secondary); margin-bottom:12px; font-size:0.85rem;">${v.type === 'Competicion' ? ('Competición · ' + v.price) : ('Año ' + v.year + ' · ' + v.km + ' · ' + v.price)}</p>
-            <button class="btn-gold" style="padding:8px 14px; font-size:0.8rem;" onclick="openVehicleDetail('${v.id}')">Ver Ficha ↗</button>
+            <button class="btn-gold" style="padding:8px 14px; font-size:0.8rem;" onclick="openVehicleDetail(${idx})">Ver Ficha ↗</button>
           </div>
         `;
         sliderContainer.appendChild(slideItem);
@@ -890,16 +925,17 @@
       const grid = document.getElementById('showroomGrid');
       grid.innerHTML = '';
 
-      vehicles.forEach(v => {
+      vehicles.forEach((v, idx) => {
         const card = document.createElement('div');
         card.className = 'vehicle-card';
-        card.onclick = () => openVehicleDetail(v.id);
+        card.onclick = () => openVehicleDetail(idx);
 
         const img = v.images && v.images.length ? v.images[0] : 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=600&q=80';
+        const isSold = v.status === 'Vendido';
 
         card.innerHTML = `
           <div class="vehicle-img-box">
-            <span class="status-badge">${v.type || 'Auto'}</span>
+            <span class="status-badge ${isSold ? 'sold' : ''}">${isSold ? 'VENDIDO' : (v.type || 'Auto')}</span>
             <img src="${img}" alt="${v.model}">
           </div>
           <div class="vehicle-body">
@@ -929,7 +965,7 @@
       const cards = document.querySelectorAll('.vehicle-card');
       vehicles.forEach((v, idx) => {
         let match = true;
-        if (search && !v.model.toLowerCase().includes(search) && !v.brand.toLowerCase().includes(search) && !(v.version && v.version.toLowerCase().includes(search)) && !v.id.toLowerCase().includes(search)) match = false;
+        if (search && !v.model.toLowerCase().includes(search) && !v.brand.toLowerCase().includes(search) && !(v.version && v.version.toLowerCase().includes(search))) match = false;
         if (type !== 'all' && (v.type || 'Auto') !== type) match = false;
         if (fuel !== 'all' && v.fuel !== fuel) match = false;
         if (trans !== 'all' && v.transmission !== trans) match = false;
@@ -938,11 +974,22 @@
       });
     }
 
-    function openVehicleDetail(id) {
-      selectedVehicle = vehicles.find(v => v.id === id);
+    function openVehicleDetail(indexOrId) {
+      if (typeof indexOrId === 'number') {
+        selectedVehicle = vehicles[indexOrId];
+      } else {
+        selectedVehicle = vehicles.find(v => v.id === indexOrId || v.db_id === indexOrId);
+      }
       if (!selectedVehicle) return;
 
       currentImageIndex = 0;
+      const isSold = selectedVehicle.status === 'Vendido';
+      const detailBadge = document.getElementById('detailStatusBadge');
+      detailBadge.textContent = isSold ? 'VENDIDO' : 'DISPONIBLE';
+      detailBadge.style.background = isSold ? 'var(--danger)' : 'rgba(34, 197, 94, 0.2)';
+      detailBadge.style.color = isSold ? '#fff' : 'var(--whatsapp-green)';
+      detailBadge.style.border = isSold ? '1px solid var(--danger)' : '1px solid var(--whatsapp-green)';
+
       document.getElementById('detailTitle').textContent = `${selectedVehicle.brand} ${selectedVehicle.model}`;
       
       if (selectedVehicle.type === 'Competicion') {
@@ -985,7 +1032,6 @@
       if (selectedVehicle.type === 'Competicion') {
         document.getElementById('mainSpecsGrid').innerHTML = `
           <div class="main-spec-box"><span class="main-spec-title">Tipo</span><span class="main-spec-val">Competición</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">ID</span><span class="main-spec-val">${selectedVehicle.id}</span></div>
           <div class="main-spec-box"><span class="main-spec-title">Marca</span><span class="main-spec-val">${selectedVehicle.brand}</span></div>
           <div class="main-spec-box"><span class="main-spec-title">Modelo</span><span class="main-spec-val">${selectedVehicle.model}</span></div>
           <div class="main-spec-box"><span class="main-spec-title">Versión</span><span class="main-spec-val">${selectedVehicle.version || 'N/D'}</span></div>
@@ -1168,6 +1214,12 @@
       renderAdminContent();
     }
 
+    async function toggleVehicleSoldStatus(vIdx, checkbox) {
+      vehicles[vIdx].status = checkbox.checked ? "Vendido" : "Disponible";
+      await saveVehicleToSupabase(vehicles[vIdx]);
+      renderAdminContent();
+    }
+
     function renderAdminContent() {
       const body = document.getElementById('adminBodyContent');
       body.innerHTML = '';
@@ -1184,12 +1236,23 @@
             `;
           });
 
+          const isSold = v.status === 'Vendido';
+
           const card = document.createElement('div');
           card.style.cssText = "background:var(--bg-card); padding:15px; border-radius:10px; border:1px solid var(--border-color); margin-bottom:12px;";
           card.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
-              <strong style="color:var(--accent-gold); font-size:0.95rem;">[${v.type || 'Auto'}] ${v.brand} ${v.model} - ${v.price} (ID: ${v.id})</strong>
-              <div style="display:flex; gap:6px;">
+              <strong style="color:var(--accent-gold); font-size:0.95rem;">[${v.type || 'Auto'}] ${v.brand} ${v.model} - ${v.price}</strong>
+              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <label class="sold-switch-wrapper" title="Cambiar estado entre Disponible y Vendido">
+                  <input type="checkbox" class="sold-switch-input" ${isSold ? 'checked' : ''} onchange="toggleVehicleSoldStatus(${vIdx}, this)">
+                  <div class="sold-switch-track">
+                    <div class="sold-switch-thumb"></div>
+                  </div>
+                  <span class="sold-switch-text" style="color:${isSold ? 'var(--danger)' : 'var(--whatsapp-green)'};">
+                    ${isSold ? 'Vendido' : 'Disponible'}
+                  </span>
+                </label>
                 <button class="btn-outline-gold" style="padding:6px 12px; font-size:0.78rem;" onclick="openEditModal(${vIdx})">✏️ Editar Ficha</button>
                 <button style="background:var(--danger); color:#fff; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:600; font-size:0.78rem;" onclick="deleteVehicle(${vIdx})">Borrar</button>
               </div>
@@ -1219,7 +1282,6 @@
             </div>
 
             <div class="form-grid-4">
-              <div><label style="font-size:0.7rem; color:var(--text-secondary)">ID Corto</label><input id="add-id" class="control-input" placeholder="a1"></div>
               <div><label style="font-size:0.7rem; color:var(--text-secondary)">Marca</label><input id="add-brand" class="control-input" placeholder="Ej: Renault"></div>
               <div><label style="font-size:0.7rem; color:var(--text-secondary)">Modelo</label><input id="add-model" class="control-input" placeholder="Ej: Fluence"></div>
               <div><label style="font-size:0.7rem; color:var(--text-secondary)">Precio</label><input id="add-price" class="control-input" placeholder="$ 13.500.000"></div>
@@ -1245,12 +1307,8 @@
       } else if (currentAdminTab === 'config') {
         body.innerHTML = `
           <div style="background:var(--bg-card); padding:20px; border-radius:10px; border:1px solid var(--border-color); max-width:600px;">
-            <h3 style="color:var(--accent-gold); margin-bottom:15px; font-size:1.1rem;">⚙️ Configuración de Cartelera y Contacto</h3>
+            <h3 style="color:var(--accent-gold); margin-bottom:15px; font-size:1.1rem;">⚙️ Configuración de Contacto</h3>
             <div style="display:flex; flex-direction:column; gap:12px;">
-              <div>
-                <label style="font-size:0.75rem; color:var(--text-secondary);">IDs Cortos de Cartelera (ej: a1, a3, c1, c3):</label>
-                <input id="cfg-featured" class="control-input" value="${config.featuredIds || ''}" placeholder="a1, a3, c1, c3">
-              </div>
               <div>
                 <label style="font-size:0.75rem; color:var(--text-secondary);">Dirección Física:</label>
                 <input id="cfg-address" class="control-input" value="${config.address || ''}">
@@ -1392,13 +1450,9 @@
           </div>
 
           <div class="form-grid-4">
-            <div><label style="font-size:0.7rem; color:var(--text-secondary)">ID Corto</label><input id="edit-id" class="control-input" value="${v.id}"></div>
             <div><label style="font-size:0.7rem; color:var(--text-secondary)">Tipo</label><select id="edit-type" class="control-select" onchange="toggleEditFields(this.value)"><option value="Auto" ${v.type==='Auto'?'selected':''}>Auto</option><option value="Camioneta" ${v.type==='Camioneta'?'selected':''}>Camioneta</option><option value="Moto" ${v.type==='Moto'?'selected':''}>Moto</option><option value="Competicion" ${v.type==='Competicion'?'selected':''}>Competición</option></select></div>
             <div><label style="font-size:0.7rem; color:var(--text-secondary)">Marca</label><input id="edit-brand" class="control-input" value="${v.brand}"></div>
             <div><label style="font-size:0.7rem; color:var(--text-secondary)">Modelo</label><input id="edit-model" class="control-input" value="${v.model}"></div>
-          </div>
-
-          <div class="form-grid-4">
             <div><label style="font-size:0.7rem; color:var(--text-secondary)">Precio</label><input id="edit-price" class="control-input" value="${v.price}"></div>
           </div>
 
@@ -1524,7 +1578,6 @@
       const type = document.getElementById('edit-type').value;
       let targetCar = vehicles[vIdx];
 
-      targetCar.id = document.getElementById('edit-id').value;
       targetCar.type = type;
       targetCar.brand = document.getElementById('edit-brand').value;
       targetCar.model = document.getElementById('edit-model').value;
@@ -1682,7 +1735,7 @@
       if (!brand || !model || !price) return alert("Completa al menos Marca, Modelo y Precio.");
 
       let newObj = {
-        id: document.getElementById('add-id').value.trim() || ("v_" + Date.now()),
+        id: "v_" + Date.now(),
         type, brand, model,
         version: document.getElementById('add-version')?.value || "",
         price,
@@ -1770,7 +1823,6 @@
     }
 
     async function saveConfigFromAdmin() {
-      config.featuredIds = document.getElementById('cfg-featured').value;
       config.address = document.getElementById('cfg-address').value;
       config.hours = document.getElementById('cfg-hours').value;
       config.phone = document.getElementById('cfg-phone').value;
