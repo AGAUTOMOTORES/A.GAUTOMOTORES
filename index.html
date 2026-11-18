@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://eurqojdpcggjsjrxddfg.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self';">
   <meta name="description" content="A.G Automotores — Catálogo exclusivo de autos, camionetas y motos seleccionadas. Financiación y atención personalizada.">
   <title>A.G Automotores | Concesionario Oficial</title>
   <link rel="icon" type="image/png" href="favicon.png">
@@ -598,6 +600,22 @@
     <div class="drawer-item" id="drawer-contacto" onclick="drawerNavigate('contacto')">📍 Contacto</div>
   </div>
 
+  <!-- MODAL LOGIN ADMIN -->
+  <div id="adminLoginModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); z-index:3500; align-items:center; justify-content:center; padding:16px;">
+    <div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-lg); padding:28px; width:100%; max-width:380px; box-shadow:0 20px 50px rgba(0,0,0,0.8);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <h3 style="color:var(--accent-gold); font-size:1.1rem;">🔐 Acceso Administrador</h3>
+        <button type="button" onclick="closeAdminLoginModal()" style="background:none; border:none; color:var(--text-secondary); font-size:1.2rem; cursor:pointer;">✕</button>
+      </div>
+      <p style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:16px;">Ingresa la clave de administrador para continuar.</p>
+      <form id="adminLoginForm" onsubmit="submitAdminLogin(event)" style="display:flex; flex-direction:column; gap:12px;">
+        <input type="password" id="adminLoginPass" class="control-input" placeholder="Contraseña" required autocomplete="current-password">
+        <p id="adminLoginError" style="display:none; color:var(--danger); font-size:0.78rem; font-weight:600;">Contraseña incorrecta.</p>
+        <button type="submit" id="adminLoginBtn" class="btn-gold" style="width:100%; padding:11px;">Ingresar</button>
+      </form>
+    </div>
+  </div>
+
   <!-- PANEL DE ADMINISTRACIÓN -->
   <div class="admin-page-view" id="adminPageView">
     <div class="admin-page-header">
@@ -605,7 +623,10 @@
         <span style="color:var(--accent-gold); font-size:1.3rem;">⚡</span>
         <h2 style="color:var(--accent-gold); font-size:1.2rem;">Panel Admin</h2>
       </div>
-      <button class="btn-outline-gold" style="padding:6px 12px; font-size:0.8rem;" onclick="closeAdminPanel()">✕ Cerrar</button>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button class="btn-outline-gold" style="padding:6px 12px; font-size:0.8rem;" onclick="logoutAdmin()">Cerrar Sesión</button>
+        <button class="btn-outline-gold" style="padding:6px 12px; font-size:0.8rem;" onclick="closeAdminPanel()">✕ Cerrar</button>
+      </div>
     </div>
 
     <div class="admin-tabs-bar">
@@ -637,6 +658,56 @@
 
     const SUPABASE_URL = "https://eurqojdpcggjsjrxddfg.supabase.co";
     const SUPABASE_KEY = "sb_publishable_gDde6ZNt8lbwARuwPz8Uiw_SNoPzjRi";
+    const DEFAULT_FALLBACK_IMG = "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=800&q=80";
+    const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+    const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+    let adminAccessToken = sessionStorage.getItem('ag_admin_jwt') || null;
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return "";
+      return String(str).replace(/[&<>'"]/g, tag => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "'": "&#39;",
+        '"': "&quot;"
+      }[tag] || tag));
+    }
+
+    function sanitizeImageUrl(url, fallback = DEFAULT_FALLBACK_IMG) {
+      if (!url || typeof url !== "string") return fallback;
+      const trimmed = url.trim();
+      if (/^data:image\/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(trimmed)) {
+        return trimmed;
+      }
+      try {
+        const parsed = new URL(trimmed);
+        if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+          return parsed.href;
+        }
+      } catch (_) {}
+      return fallback;
+    }
+
+    function sanitizeExternalUrl(url, fallback) {
+      if (!url || typeof url !== "string") return fallback;
+      try {
+        const parsed = new URL(url.trim());
+        if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+          return parsed.href;
+        }
+      } catch (_) {}
+      return fallback;
+    }
+
+    function getAuthHeaders(extra = {}) {
+      const token = adminAccessToken || SUPABASE_KEY;
+      return {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${token}`,
+        ...extra
+      };
+    }
 
     const defaultConfig = {
       address: "Agüero Vera 127, La Rioja, Argentina",
@@ -724,17 +795,6 @@
           if (data && data.length > 0 && data[0].data) {
             config = data[0].data;
             localStorage.setItem('ag_config_data', JSON.stringify(config));
-          } else {
-            await fetch(`${SUPABASE_URL}/rest/v1/configuracion`, {
-              method: "POST",
-              headers: {
-                "apikey": SUPABASE_KEY,
-                "Authorization": `Bearer ${SUPABASE_KEY}`,
-                "Content-Type": "application/json",
-                "Prefer": "return=minimal"
-              },
-              body: JSON.stringify({ id: 1, data: defaultConfig })
-            });
           }
         }
       } catch (err) {
@@ -751,24 +811,20 @@
       try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/configuracion?id=eq.1`, {
           method: "PATCH",
-          headers: {
-            "apikey": SUPABASE_KEY,
-            "Authorization": `Bearer ${SUPABASE_KEY}`,
+          headers: getAuthHeaders({
             "Content-Type": "application/json",
             "Prefer": "return=minimal"
-          },
+          }),
           body: JSON.stringify({ data: config })
         });
 
         if (!res.ok) {
           await fetch(`${SUPABASE_URL}/rest/v1/configuracion`, {
             method: "POST",
-            headers: {
-              "apikey": SUPABASE_KEY,
-              "Authorization": `Bearer ${SUPABASE_KEY}`,
+            headers: getAuthHeaders({
               "Content-Type": "application/json",
               "Prefer": "return=minimal"
-            },
+            }),
             body: JSON.stringify({ id: 1, data: config })
           });
         }
@@ -802,14 +858,12 @@
     async function saveVehicleToSupabase(vObj) {
       try {
         if (vObj.db_id) {
-          const res = await fetch(`${SUPABASE_URL}/rest/v1/vehiculos?id=eq.${vObj.db_id}`, {
+          const res = await fetch(`${SUPABASE_URL}/rest/v1/vehiculos?id=eq.${encodeURIComponent(vObj.db_id)}`, {
             method: "PATCH",
-            headers: {
-              "apikey": SUPABASE_KEY,
-              "Authorization": `Bearer ${SUPABASE_KEY}`,
+            headers: getAuthHeaders({
               "Content-Type": "application/json",
               "Prefer": "return=minimal"
-            },
+            }),
             body: JSON.stringify({ data: vObj })
           });
           if (res.ok) {
@@ -821,12 +875,10 @@
         } else {
           const res = await fetch(`${SUPABASE_URL}/rest/v1/vehiculos`, {
             method: "POST",
-            headers: {
-              "apikey": SUPABASE_KEY,
-              "Authorization": `Bearer ${SUPABASE_KEY}`,
+            headers: getAuthHeaders({
               "Content-Type": "application/json",
               "Prefer": "return=representation"
-            },
+            }),
             body: JSON.stringify({ data: vObj })
           });
           if (res.ok) {
@@ -842,12 +894,9 @@
 
     async function deleteVehicleFromSupabase(db_id) {
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/vehiculos?id=eq.${db_id}`, {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/vehiculos?id=eq.${encodeURIComponent(db_id)}`, {
           method: "DELETE",
-          headers: {
-            "apikey": SUPABASE_KEY,
-            "Authorization": `Bearer ${SUPABASE_KEY}`
-          }
+          headers: getAuthHeaders()
         });
         if (res.ok) {
           await fetchVehiclesFromSupabase();
@@ -871,7 +920,7 @@
 
     function openGoogleMaps() {
       const query = encodeURIComponent(config.address || "La Rioja, Argentina");
-      window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
+      window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank', 'noopener,noreferrer');
     }
 
     function switchInterface(interfaceId) {
@@ -895,19 +944,20 @@
       if (vehicles.length === 0) return;
 
       vehicles.forEach((v, idx) => {
-        const slideImg = v.images && v.images.length ? v.images[0] : 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80';
+        const slideImg = sanitizeImageUrl(v.images && v.images.length ? v.images[0] : '', 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80');
+        const safeBgUrl = slideImg.replace(/['"()\\]/g, '');
         const isSold = v.status === 'Vendido';
         const slideItem = document.createElement('div');
         slideItem.className = `slide-item ${idx === 0 ? 'active' : ''}`;
-        slideItem.style.backgroundImage = `url('${slideImg}')`;
+        slideItem.style.backgroundImage = `url('${safeBgUrl}')`;
         slideItem.innerHTML = `
           <div class="slide-overlay"></div>
           <div class="slide-content">
             <span style="background:${isSold ? 'var(--danger)' : 'var(--accent-gold)'}; color:${isSold ? '#fff' : '#000'}; font-size:0.68rem; font-weight:800; padding:3px 8px; border-radius:4px; text-transform:uppercase; letter-spacing:0.05em;">
-              ${isSold ? 'VENDIDO' : (v.type || 'Destacado')}
+              ${isSold ? 'VENDIDO' : escapeHtml(v.type || 'Destacado')}
             </span>
-            <h1 style="font-size:1.8rem; color:#fff; margin:6px 0;">${v.brand} ${v.model}</h1>
-            <p style="color:var(--text-secondary); margin-bottom:12px; font-size:0.85rem;">${v.type === 'Competicion' ? ('Competición · ' + v.price) : ('Año ' + v.year + ' · ' + v.km + ' · ' + v.price)}</p>
+            <h1 style="font-size:1.8rem; color:#fff; margin:6px 0;">${escapeHtml(v.brand)} ${escapeHtml(v.model)}</h1>
+            <p style="color:var(--text-secondary); margin-bottom:12px; font-size:0.85rem;">${v.type === 'Competicion' ? ('Competición · ' + escapeHtml(v.price)) : ('Año ' + escapeHtml(v.year) + ' · ' + escapeHtml(v.km) + ' · ' + escapeHtml(v.price))}</p>
             <button class="btn-gold" style="padding:8px 14px; font-size:0.8rem;" onclick="openVehicleDetail(${idx})">Ver Ficha ↗</button>
           </div>
         `;
@@ -940,25 +990,25 @@
         card.className = 'vehicle-card';
         card.onclick = () => openVehicleDetail(idx);
 
-        const img = v.images && v.images.length ? v.images[0] : 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=600&q=80';
+        const img = sanitizeImageUrl(v.images && v.images.length ? v.images[0] : '', 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=600&q=80');
         const isSold = v.status === 'Vendido';
 
         card.innerHTML = `
           <div class="vehicle-img-box">
-            <span class="status-badge ${isSold ? 'sold' : ''}">${isSold ? 'VENDIDO' : (v.type || 'Auto')}</span>
-            <img src="${img}" alt="${v.model}">
+            <span class="status-badge ${isSold ? 'sold' : ''}">${isSold ? 'VENDIDO' : escapeHtml(v.type || 'Auto')}</span>
+            <img src="${escapeHtml(img)}" alt="${escapeHtml(v.model)}">
           </div>
           <div class="vehicle-body">
             <div>
-              <span class="vehicle-brand">${v.brand}</span>
-              <h3 class="vehicle-name">${v.model}</h3>
+              <span class="vehicle-brand">${escapeHtml(v.brand)}</span>
+              <h3 class="vehicle-name">${escapeHtml(v.model)}</h3>
               <div class="specs-chips">
-                <span class="chip">${v.type === 'Competicion' ? (v.fuel || 'Nafta') : v.year}</span>
-                <span class="chip">${v.type === 'Competicion' ? (v.transmission || 'Manual') : (v.engineLiters || '1.6')}</span>
+                <span class="chip">${escapeHtml(v.type === 'Competicion' ? (v.fuel || 'Nafta') : v.year)}</span>
+                <span class="chip">${escapeHtml(v.type === 'Competicion' ? (v.transmission || 'Manual') : (v.engineLiters || '1.6'))}</span>
               </div>
             </div>
             <div class="vehicle-footer">
-              <span class="vehicle-price">${v.price}</span>
+              <span class="vehicle-price">${escapeHtml(v.price)}</span>
             </div>
           </div>
         `;
@@ -1025,7 +1075,7 @@
       const thumbs = document.getElementById('detailThumbs');
       thumbs.innerHTML = '';
 
-      const images = selectedVehicle.images && selectedVehicle.images.length ? selectedVehicle.images : ['https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=600&q=80'];
+      const images = selectedVehicle.images && selectedVehicle.images.length ? selectedVehicle.images.map(u => sanitizeImageUrl(u, 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=600&q=80')) : ['https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=600&q=80'];
       mainImg.src = images[0];
 
       images.forEach((imgSrc, idx) => {
@@ -1035,133 +1085,136 @@
           currentImageIndex = idx;
           updateThumbActive(idx);
         };
-        thumb.innerHTML = `<img src="${imgSrc}">`;
+        const thumbImg = document.createElement('img');
+        thumbImg.src = imgSrc;
+        thumb.appendChild(thumbImg);
         thumbs.appendChild(thumb);
       });
 
+      const e = escapeHtml;
       if (selectedVehicle.type === 'Competicion') {
         document.getElementById('mainSpecsGrid').innerHTML = `
           <div class="main-spec-box"><span class="main-spec-title">Tipo</span><span class="main-spec-val">Competición</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Marca</span><span class="main-spec-val">${selectedVehicle.brand}</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Modelo</span><span class="main-spec-val">${selectedVehicle.model}</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Versión</span><span class="main-spec-val">${selectedVehicle.version || 'N/D'}</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Combustible</span><span class="main-spec-val">${selectedVehicle.fuel || 'Nafta'}</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Transmisión</span><span class="main-spec-val">${selectedVehicle.transmission || 'Manual'}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Marca</span><span class="main-spec-val">${e(selectedVehicle.brand)}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Modelo</span><span class="main-spec-val">${e(selectedVehicle.model)}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Versión</span><span class="main-spec-val">${e(selectedVehicle.version || 'N/D')}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Combustible</span><span class="main-spec-val">${e(selectedVehicle.fuel || 'Nafta')}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Transmisión</span><span class="main-spec-val">${e(selectedVehicle.transmission || 'Manual')}</span></div>
         `;
       } else if (selectedVehicle.type === 'Moto') {
         document.getElementById('mainSpecsGrid').innerHTML = `
           <div class="main-spec-box"><span class="main-spec-title">Tipo</span><span class="main-spec-val">Moto</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Marca</span><span class="main-spec-val">${selectedVehicle.brand}</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Modelo</span><span class="main-spec-val">${selectedVehicle.model}</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Año</span><span class="main-spec-val">${selectedVehicle.year}</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Cilindrada</span><span class="main-spec-val">${selectedVehicle.engineLiters || '250 cc'}</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Potencia</span><span class="main-spec-val">${selectedVehicle.power || '20,4 hp'}</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Color</span><span class="main-spec-val">${selectedVehicle.color || 'N/D'}</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Kilómetros</span><span class="main-spec-val">${selectedVehicle.km}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Marca</span><span class="main-spec-val">${e(selectedVehicle.brand)}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Modelo</span><span class="main-spec-val">${e(selectedVehicle.model)}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Año</span><span class="main-spec-val">${e(selectedVehicle.year)}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Cilindrada</span><span class="main-spec-val">${e(selectedVehicle.engineLiters || '250 cc')}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Potencia</span><span class="main-spec-val">${e(selectedVehicle.power || '20,4 hp')}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Color</span><span class="main-spec-val">${e(selectedVehicle.color || 'N/D')}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Kilómetros</span><span class="main-spec-val">${e(selectedVehicle.km)}</span></div>
         `;
 
         document.getElementById('extendedSpecsContent').innerHTML = `
           <div class="specs-section-title">Principales</div>
           <div class="specs-table-grid">
-            <div class="spec-row"><span class="spec-label">Tipo de moto</span><span class="spec-val">${selectedVehicle.motoType || 'Enduro'}</span></div>
-            <div class="spec-row"><span class="spec-label">Marca</span><span class="spec-val">${selectedVehicle.brand}</span></div>
-            <div class="spec-row"><span class="spec-label">Modelo</span><span class="spec-val">${selectedVehicle.model}</span></div>
-            <div class="spec-row"><span class="spec-label">Año</span><span class="spec-val">${selectedVehicle.year}</span></div>
-            <div class="spec-row"><span class="spec-label">Motor</span><span class="spec-val">${selectedVehicle.engineType || '4 tiempos'}</span></div>
-            <div class="spec-row"><span class="spec-label">Kilómetros</span><span class="spec-val">${selectedVehicle.km}</span></div>
-            <div class="spec-row"><span class="spec-label">Potencia</span><span class="spec-val">${selectedVehicle.power || '20,4 hp'}</span></div>
-            <div class="spec-row"><span class="spec-label">Cilindrada</span><span class="spec-val">${selectedVehicle.engineLiters || '250 cc'}</span></div>
+            <div class="spec-row"><span class="spec-label">Tipo de moto</span><span class="spec-val">${e(selectedVehicle.motoType || 'Enduro')}</span></div>
+            <div class="spec-row"><span class="spec-label">Marca</span><span class="spec-val">${e(selectedVehicle.brand)}</span></div>
+            <div class="spec-row"><span class="spec-label">Modelo</span><span class="spec-val">${e(selectedVehicle.model)}</span></div>
+            <div class="spec-row"><span class="spec-label">Año</span><span class="spec-val">${e(selectedVehicle.year)}</span></div>
+            <div class="spec-row"><span class="spec-label">Motor</span><span class="spec-val">${e(selectedVehicle.engineType || '4 tiempos')}</span></div>
+            <div class="spec-row"><span class="spec-label">Kilómetros</span><span class="spec-val">${e(selectedVehicle.km)}</span></div>
+            <div class="spec-row"><span class="spec-label">Potencia</span><span class="spec-val">${e(selectedVehicle.power || '20,4 hp')}</span></div>
+            <div class="spec-row"><span class="spec-label">Cilindrada</span><span class="spec-val">${e(selectedVehicle.engineLiters || '250 cc')}</span></div>
           </div>
         `;
       } else {
         document.getElementById('mainSpecsGrid').innerHTML = `
-          <div class="main-spec-box"><span class="main-spec-title">Tipo</span><span class="main-spec-val">${selectedVehicle.type}</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Marca</span><span class="main-spec-val">${selectedVehicle.brand}</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Modelo</span><span class="main-spec-val">${selectedVehicle.model}</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Año</span><span class="main-spec-val">${selectedVehicle.year}</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Versión</span><span class="main-spec-val">${selectedVehicle.version || 'N/D'}</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Color</span><span class="main-spec-val">${selectedVehicle.color || 'N/D'}</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Kilómetros</span><span class="main-spec-val">${selectedVehicle.km}</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Combustible</span><span class="main-spec-val">${selectedVehicle.fuel || 'Nafta'}</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Transmisión</span><span class="main-spec-val">${selectedVehicle.transmission || 'Manual'}</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Motor</span><span class="main-spec-val">${selectedVehicle.engineLiters || 'N/D'}</span></div>
-          <div class="main-spec-box"><span class="main-spec-title">Carrocería</span><span class="main-spec-val">${selectedVehicle.bodyType || 'N/D'}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Tipo</span><span class="main-spec-val">${e(selectedVehicle.type)}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Marca</span><span class="main-spec-val">${e(selectedVehicle.brand)}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Modelo</span><span class="main-spec-val">${e(selectedVehicle.model)}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Año</span><span class="main-spec-val">${e(selectedVehicle.year)}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Versión</span><span class="main-spec-val">${e(selectedVehicle.version || 'N/D')}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Color</span><span class="main-spec-val">${e(selectedVehicle.color || 'N/D')}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Kilómetros</span><span class="main-spec-val">${e(selectedVehicle.km)}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Combustible</span><span class="main-spec-val">${e(selectedVehicle.fuel || 'Nafta')}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Transmisión</span><span class="main-spec-val">${e(selectedVehicle.transmission || 'Manual')}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Motor</span><span class="main-spec-val">${e(selectedVehicle.engineLiters || 'N/D')}</span></div>
+          <div class="main-spec-box"><span class="main-spec-title">Carrocería</span><span class="main-spec-val">${e(selectedVehicle.bodyType || 'N/D')}</span></div>
         `;
 
         document.getElementById('extendedSpecsContent').innerHTML = `
           <div class="specs-section-title">Principales</div>
           <div class="specs-table-grid">
-            <div class="spec-row"><span class="spec-label">Marca</span><span class="spec-val">${selectedVehicle.brand}</span></div>
-            <div class="spec-row"><span class="spec-label">Modelo</span><span class="spec-val">${selectedVehicle.model}</span></div>
-            <div class="spec-row"><span class="spec-label">Año</span><span class="spec-val">${selectedVehicle.year}</span></div>
-            <div class="spec-row"><span class="spec-label">Versión</span><span class="spec-val">${selectedVehicle.version || 'N/D'}</span></div>
-            <div class="spec-row"><span class="spec-label">Color</span><span class="spec-val">${selectedVehicle.color || 'N/D'}</span></div>
-            <div class="spec-row"><span class="spec-label">Kilómetros</span><span class="spec-val">${selectedVehicle.km}</span></div>
-            <div class="spec-row"><span class="spec-label">Tipo de combustible</span><span class="spec-val">${selectedVehicle.fuel || 'Nafta'}</span></div>
-            <div class="spec-row"><span class="spec-label">Puertas</span><span class="spec-val">${selectedVehicle.doors || '4'}</span></div>
-            <div class="spec-row"><span class="spec-label">Transmisión</span><span class="spec-val">${selectedVehicle.transmission || 'Manual'}</span></div>
-            <div class="spec-row"><span class="spec-label">Motor</span><span class="spec-val">${selectedVehicle.engineLiters || 'N/D'}</span></div>
-            <div class="spec-row"><span class="spec-label">Tipo de carrocería</span><span class="spec-val">${selectedVehicle.bodyType || 'N/D'}</span></div>
+            <div class="spec-row"><span class="spec-label">Marca</span><span class="spec-val">${e(selectedVehicle.brand)}</span></div>
+            <div class="spec-row"><span class="spec-label">Modelo</span><span class="spec-val">${e(selectedVehicle.model)}</span></div>
+            <div class="spec-row"><span class="spec-label">Año</span><span class="spec-val">${e(selectedVehicle.year)}</span></div>
+            <div class="spec-row"><span class="spec-label">Versión</span><span class="spec-val">${e(selectedVehicle.version || 'N/D')}</span></div>
+            <div class="spec-row"><span class="spec-label">Color</span><span class="spec-val">${e(selectedVehicle.color || 'N/D')}</span></div>
+            <div class="spec-row"><span class="spec-label">Kilómetros</span><span class="spec-val">${e(selectedVehicle.km)}</span></div>
+            <div class="spec-row"><span class="spec-label">Tipo de combustible</span><span class="spec-val">${e(selectedVehicle.fuel || 'Nafta')}</span></div>
+            <div class="spec-row"><span class="spec-label">Puertas</span><span class="spec-val">${e(selectedVehicle.doors || '4')}</span></div>
+            <div class="spec-row"><span class="spec-label">Transmisión</span><span class="spec-val">${e(selectedVehicle.transmission || 'Manual')}</span></div>
+            <div class="spec-row"><span class="spec-label">Motor</span><span class="spec-val">${e(selectedVehicle.engineLiters || 'N/D')}</span></div>
+            <div class="spec-row"><span class="spec-label">Tipo de carrocería</span><span class="spec-val">${e(selectedVehicle.bodyType || 'N/D')}</span></div>
           </div>
 
           <div class="specs-section-title">Seguridad (Autos y Camionetas)</div>
           <div class="specs-table-grid">
-            <div class="spec-row"><span class="spec-label">Frenos ABS</span><span class="spec-val">${selectedVehicle.abs || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Defensa delantera</span><span class="spec-val">${selectedVehicle.frontGuard || 'No'}</span></div>
-            <div class="spec-row"><span class="spec-label">Airbag conductor</span><span class="spec-val">${selectedVehicle.airbag || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Faros regulación auto.</span><span class="spec-val">${selectedVehicle.autoLights || 'No'}</span></div>
-            <div class="spec-row"><span class="spec-label">Sensor estacionamiento</span><span class="spec-val">${selectedVehicle.parkingSensor || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Airbag pasajero</span><span class="spec-val">${selectedVehicle.dualAirbag || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Faros antinieblas</span><span class="spec-val">${selectedVehicle.rearFogLights || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Desempañador trasero</span><span class="spec-val">${selectedVehicle.rearDefroster || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Control estabilidad</span><span class="spec-val">${selectedVehicle.stabilityCtrl || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Tercera luz freno led</span><span class="spec-val">${selectedVehicle.ledBrake || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Cierre centralizado</span><span class="spec-val">${selectedVehicle.centralLock || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Tracción ASR</span><span class="spec-val">${selectedVehicle.asr || 'Sí'}</span></div>
+            <div class="spec-row"><span class="spec-label">Frenos ABS</span><span class="spec-val">${e(selectedVehicle.abs || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Defensa delantera</span><span class="spec-val">${e(selectedVehicle.frontGuard || 'No')}</span></div>
+            <div class="spec-row"><span class="spec-label">Airbag conductor</span><span class="spec-val">${e(selectedVehicle.airbag || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Faros regulación auto.</span><span class="spec-val">${e(selectedVehicle.autoLights || 'No')}</span></div>
+            <div class="spec-row"><span class="spec-label">Sensor estacionamiento</span><span class="spec-val">${e(selectedVehicle.parkingSensor || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Airbag pasajero</span><span class="spec-val">${e(selectedVehicle.dualAirbag || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Faros antinieblas</span><span class="spec-val">${e(selectedVehicle.rearFogLights || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Desempañador trasero</span><span class="spec-val">${e(selectedVehicle.rearDefroster || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Control estabilidad</span><span class="spec-val">${e(selectedVehicle.stabilityCtrl || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Tercera luz freno led</span><span class="spec-val">${e(selectedVehicle.ledBrake || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Cierre centralizado</span><span class="spec-val">${e(selectedVehicle.centralLock || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Tracción ASR</span><span class="spec-val">${e(selectedVehicle.asr || 'Sí')}</span></div>
           </div>
 
           <div class="specs-section-title">Rendimiento y dimensiones</div>
           <div class="specs-table-grid">
-            <div class="spec-row"><span class="spec-label">Control de tracción</span><span class="spec-val">${selectedVehicle.traction || 'Delantera'}</span></div>
-            <div class="spec-row"><span class="spec-label">Capacidad personas</span><span class="spec-val">${selectedVehicle.capacity || '5'}</span></div>
-            <div class="spec-row"><span class="spec-label">Potencia</span><span class="spec-val">${selectedVehicle.power || '115 hp'}</span></div>
-            <div class="spec-row"><span class="spec-label">Distancia entre ejes</span><span class="spec-val">${selectedVehicle.wheelbase || '2.590 mm'}</span></div>
-            <div class="spec-row"><span class="spec-label">Capacidad del tanque</span><span class="spec-val">${selectedVehicle.tankCap || '50 L'}</span></div>
-            <div class="spec-row"><span class="spec-label">Válvulas por cilindro</span><span class="spec-val">${selectedVehicle.valves || '4'}</span></div>
+            <div class="spec-row"><span class="spec-label">Control de tracción</span><span class="spec-val">${e(selectedVehicle.traction || 'Delantera')}</span></div>
+            <div class="spec-row"><span class="spec-label">Capacidad personas</span><span class="spec-val">${e(selectedVehicle.capacity || '5')}</span></div>
+            <div class="spec-row"><span class="spec-label">Potencia</span><span class="spec-val">${e(selectedVehicle.power || '115 hp')}</span></div>
+            <div class="spec-row"><span class="spec-label">Distancia entre ejes</span><span class="spec-val">${e(selectedVehicle.wheelbase || '2.590 mm')}</span></div>
+            <div class="spec-row"><span class="spec-label">Capacidad del tanque</span><span class="spec-val">${e(selectedVehicle.tankCap || '50 L')}</span></div>
+            <div class="spec-row"><span class="spec-label">Válvulas por cilindro</span><span class="spec-val">${e(selectedVehicle.valves || '4')}</span></div>
           </div>
 
           <div class="specs-section-title">Exterior</div>
           <div class="specs-table-grid">
-            <div class="spec-row"><span class="spec-label">Llantas de aleación</span><span class="spec-val">${selectedVehicle.alloys || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Techo solar</span><span class="spec-val">${selectedVehicle.sunroof || 'No'}</span></div>
-            <div class="spec-row"><span class="spec-label">Soporte rueda auxilio</span><span class="spec-val">${selectedVehicle.spareSupport || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Limpia/lava luneta</span><span class="spec-val">${selectedVehicle.rearWiper || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Porta equipaje</span><span class="spec-val">${selectedVehicle.roofRack || 'No'}</span></div>
+            <div class="spec-row"><span class="spec-label">Llantas de aleación</span><span class="spec-val">${e(selectedVehicle.alloys || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Techo solar</span><span class="spec-val">${e(selectedVehicle.sunroof || 'No')}</span></div>
+            <div class="spec-row"><span class="spec-label">Soporte rueda auxilio</span><span class="spec-val">${e(selectedVehicle.spareSupport || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Limpia/lava luneta</span><span class="spec-val">${e(selectedVehicle.rearWiper || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Porta equipaje</span><span class="spec-val">${e(selectedVehicle.roofRack || 'No')}</span></div>
           </div>
 
           <div class="specs-section-title">Confort y conveniencia</div>
           <div class="specs-table-grid">
-            <div class="spec-row"><span class="spec-label">Piloto automático</span><span class="spec-val">${selectedVehicle.autopilot || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Aire acondicionado</span><span class="spec-val">${selectedVehicle.aircon || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Computadora de abordo</span><span class="spec-val">${selectedVehicle.onboardComp || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Cristales eléctricos</span><span class="spec-val">${selectedVehicle.powerWindows || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Sensor de lluvia</span><span class="spec-val">${selectedVehicle.rainSensor || 'No'}</span></div>
-            <div class="spec-row"><span class="spec-label">Apertura remota de baúl</span><span class="spec-val">${selectedVehicle.trunkRelease || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Comando radio al volante</span><span class="spec-val">${selectedVehicle.steeringRemote || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Porta vasos</span><span class="spec-val">${selectedVehicle.cupholders || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Climatizador</span><span class="spec-val">${selectedVehicle.climate || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Cierre automático vidrios</span><span class="spec-val">${selectedVehicle.autoGlass || 'Sí'}</span></div>
+            <div class="spec-row"><span class="spec-label">Piloto automático</span><span class="spec-val">${e(selectedVehicle.autopilot || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Aire acondicionado</span><span class="spec-val">${e(selectedVehicle.aircon || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Computadora de abordo</span><span class="spec-val">${e(selectedVehicle.onboardComp || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Cristales eléctricos</span><span class="spec-val">${e(selectedVehicle.powerWindows || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Sensor de lluvia</span><span class="spec-val">${e(selectedVehicle.rainSensor || 'No')}</span></div>
+            <div class="spec-row"><span class="spec-label">Apertura remota de baúl</span><span class="spec-val">${e(selectedVehicle.trunkRelease || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Comando radio al volante</span><span class="spec-val">${e(selectedVehicle.steeringRemote || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Porta vasos</span><span class="spec-val">${e(selectedVehicle.cupholders || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Climatizador</span><span class="spec-val">${e(selectedVehicle.climate || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Cierre automático vidrios</span><span class="spec-val">${e(selectedVehicle.autoGlass || 'Sí')}</span></div>
           </div>
 
           <div class="specs-section-title">Entretenimiento</div>
           <div class="specs-table-grid">
-            <div class="spec-row"><span class="spec-label">AM/FM</span><span class="spec-val">${selectedVehicle.amfm || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Entrada auxiliar</span><span class="spec-val">${selectedVehicle.aux || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Bluetooth</span><span class="spec-val">${selectedVehicle.bluetooth || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">CD</span><span class="spec-val">${selectedVehicle.cd || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">DVD</span><span class="spec-val">${selectedVehicle.dvd || 'No'}</span></div>
-            <div class="spec-row"><span class="spec-label">Reproductor MP3</span><span class="spec-val">${selectedVehicle.mp3 || 'Sí'}</span></div>
-            <div class="spec-row"><span class="spec-label">Entrada USB</span><span class="spec-val">${selectedVehicle.usb || 'Sí'}</span></div>
+            <div class="spec-row"><span class="spec-label">AM/FM</span><span class="spec-val">${e(selectedVehicle.amfm || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Entrada auxiliar</span><span class="spec-val">${e(selectedVehicle.aux || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Bluetooth</span><span class="spec-val">${e(selectedVehicle.bluetooth || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">CD</span><span class="spec-val">${e(selectedVehicle.cd || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">DVD</span><span class="spec-val">${e(selectedVehicle.dvd || 'No')}</span></div>
+            <div class="spec-row"><span class="spec-label">Reproductor MP3</span><span class="spec-val">${e(selectedVehicle.mp3 || 'Sí')}</span></div>
+            <div class="spec-row"><span class="spec-label">Entrada USB</span><span class="spec-val">${e(selectedVehicle.usb || 'Sí')}</span></div>
           </div>
         `;
       }
@@ -1178,16 +1231,19 @@
 
     function openWhatsAppGeneral() {
       const cleanPhone = (config.phone || "5493804374962").replace(/\D/g, '');
-      window.open(`https://wa.me/${cleanPhone}`, '_blank');
+      window.open(`https://wa.me/${cleanPhone}`, '_blank', 'noopener,noreferrer');
     }
 
-    function openInstagram() { window.open(config.instagram || "https://www.instagram.com/a.gautomotores/", '_blank'); }
+    function openInstagram() {
+      const safeUrl = sanitizeExternalUrl(config.instagram, "https://www.instagram.com/a.gautomotores/");
+      window.open(safeUrl, '_blank', 'noopener,noreferrer');
+    }
 
     function sendWhatsAppVehicle() {
       if (!selectedVehicle) return;
       const cleanPhone = (config.phone || "5493804374962").replace(/\D/g, '');
       const msg = `Hola! Quisiera consultar disponibilidad por el ${selectedVehicle.brand} ${selectedVehicle.model} a ${selectedVehicle.price}.`;
-      window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+      window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
     }
 
     function sendWhatsAppTrade() {
@@ -1199,14 +1255,68 @@
       
       const cleanPhone = (config.phone || "5493804374962").replace(/\D/g, '');
       const msg = `Hola! Quisiera cotizar mi vehículo para permuta:\nUnidad: ${b}\nAño: ${y}\nKM: ${k}\nEstado: ${s}`;
-      window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+      window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
     }
 
     function openAdminPanel() {
-      const pass = prompt("🔐 Clave de Administrador:");
-      if (pass !== "4212") return alert("Clave incorrecta.");
-      renderAdminContent();
-      document.getElementById('adminPageView').style.display = 'flex';
+      if (adminAccessToken) {
+        renderAdminContent();
+        document.getElementById('adminPageView').style.display = 'flex';
+      } else {
+        document.getElementById('adminLoginError').style.display = 'none';
+        document.getElementById('adminLoginModal').style.display = 'flex';
+        document.getElementById('adminLoginPass').focus();
+      }
+    }
+
+    function closeAdminLoginModal() {
+      document.getElementById('adminLoginModal').style.display = 'none';
+    }
+
+    async function submitAdminLogin(e) {
+      e.preventDefault();
+      const email = "admin@agautomotores.com";
+      const password = document.getElementById('adminLoginPass').value;
+      const errEl = document.getElementById('adminLoginError');
+      const btn = document.getElementById('adminLoginBtn');
+
+      errEl.style.display = 'none';
+      btn.disabled = true;
+      btn.textContent = 'Verificando...';
+
+      try {
+        const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.access_token) {
+          throw new Error(data.error_description || 'Credenciales inválidas');
+        }
+        adminAccessToken = data.access_token;
+        sessionStorage.setItem('ag_admin_jwt', adminAccessToken);
+        document.getElementById('adminLoginPass').value = '';
+        closeAdminLoginModal();
+        renderAdminContent();
+        document.getElementById('adminPageView').style.display = 'flex';
+      } catch (err) {
+        errEl.textContent = 'Credenciales inválidas o cuenta no autorizada.';
+        errEl.style.display = 'block';
+        document.getElementById('adminLoginPass').value = '';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Ingresar';
+      }
+    }
+
+    function logoutAdmin() {
+      adminAccessToken = null;
+      sessionStorage.removeItem('ag_admin_jwt');
+      closeAdminPanel();
     }
 
     function closeAdminPanel() { document.getElementById('adminPageView').style.display = 'none'; }
@@ -1238,9 +1348,10 @@
         vehicles.forEach((v, vIdx) => {
           let photosHTML = '';
           (v.images || []).forEach((img, imgIdx) => {
+            const safeImg = sanitizeImageUrl(img);
             photosHTML += `
               <div class="admin-photo-thumb">
-                <img src="${img}">
+                <img src="${escapeHtml(safeImg)}">
                 <button class="admin-photo-delete" onclick="deleteCarImage(${vIdx}, ${imgIdx})">✕</button>
               </div>
             `;
@@ -1252,7 +1363,7 @@
           card.style.cssText = "background:var(--bg-card); padding:15px; border-radius:10px; border:1px solid var(--border-color); margin-bottom:12px;";
           card.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
-              <strong style="color:var(--accent-gold); font-size:0.95rem;">[${v.type || 'Auto'}] ${v.brand} ${v.model} - ${v.price}</strong>
+              <strong style="color:var(--accent-gold); font-size:0.95rem;">[${escapeHtml(v.type || 'Auto')}] ${escapeHtml(v.brand)} ${escapeHtml(v.model)} - ${escapeHtml(v.price)}</strong>
               <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                 <label class="sold-switch-wrapper" title="Cambiar estado entre Disponible y Vendido">
                   <input type="checkbox" class="sold-switch-input" ${isSold ? 'checked' : ''} onchange="toggleVehicleSoldStatus(${vIdx}, this)">
@@ -1321,19 +1432,19 @@
             <div style="display:flex; flex-direction:column; gap:12px;">
               <div>
                 <label style="font-size:0.75rem; color:var(--text-secondary);">Dirección Física:</label>
-                <input id="cfg-address" class="control-input" value="${config.address || ''}">
+                <input id="cfg-address" class="control-input" value="${escapeHtml(config.address || '')}">
               </div>
               <div>
                 <label style="font-size:0.75rem; color:var(--text-secondary);">Horarios de Atención:</label>
-                <input id="cfg-hours" class="control-input" value="${config.hours || ''}">
+                <input id="cfg-hours" class="control-input" value="${escapeHtml(config.hours || '')}">
               </div>
               <div>
                 <label style="font-size:0.75rem; color:var(--text-secondary);">Número de WhatsApp (con código de país sin + ni espacios):</label>
-                <input id="cfg-phone" class="control-input" value="${config.phone || ''}">
+                <input id="cfg-phone" class="control-input" value="${escapeHtml(config.phone || '')}">
               </div>
               <div>
                 <label style="font-size:0.75rem; color:var(--text-secondary);">Enlace de Instagram:</label>
-                <input id="cfg-insta" class="control-input" value="${config.instagram || ''}">
+                <input id="cfg-insta" class="control-input" value="${escapeHtml(config.instagram || '')}">
               </div>
               <button class="btn-gold" style="margin-top:5px; padding:10px;" onclick="saveConfigFromAdmin()">Guardar Cambios en la Nube</button>
             </div>
@@ -1455,22 +1566,22 @@
       body.innerHTML = `
         <div style="background:var(--bg-card); padding:20px; border-radius:10px; border:1px solid var(--border-color);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-            <h3 style="color:var(--accent-gold); font-size:1.1rem;">✏️ Editando: ${v.brand} ${v.model}</h3>
+            <h3 style="color:var(--accent-gold); font-size:1.1rem;">✏️ Editando: ${escapeHtml(v.brand)} ${escapeHtml(v.model)}</h3>
             <button class="btn-outline-gold" style="padding:4px 10px; font-size:0.75rem;" onclick="switchAdminTab('stock', document.getElementById('tab-stock'))">← Volver</button>
           </div>
 
           <div class="form-grid-4">
             <div><label style="font-size:0.7rem; color:var(--text-secondary)">Tipo</label><select id="edit-type" class="control-select" onchange="toggleEditFields(this.value)"><option value="Auto" ${v.type==='Auto'?'selected':''}>Auto</option><option value="Camioneta" ${v.type==='Camioneta'?'selected':''}>Camioneta</option><option value="Moto" ${v.type==='Moto'?'selected':''}>Moto</option><option value="Competicion" ${v.type==='Competicion'?'selected':''}>Competición</option></select></div>
-            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Marca</label><input id="edit-brand" class="control-input" value="${v.brand}"></div>
-            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Modelo</label><input id="edit-model" class="control-input" value="${v.model}"></div>
-            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Precio</label><input id="edit-price" class="control-input" value="${v.price}"></div>
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Marca</label><input id="edit-brand" class="control-input" value="${escapeHtml(v.brand)}"></div>
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Modelo</label><input id="edit-model" class="control-input" value="${escapeHtml(v.model)}"></div>
+            <div><label style="font-size:0.7rem; color:var(--text-secondary)">Precio</label><input id="edit-price" class="control-input" value="${escapeHtml(v.price)}"></div>
           </div>
 
           <div id="editDynamicFieldsContainer"></div>
 
           <div style="margin-bottom:15px; margin-top:15px;">
             <label style="font-size:0.7rem; color:var(--text-secondary)">Descripción General</label>
-            <textarea id="edit-desc" class="control-input" style="height:70px;">${v.desc || ''}</textarea>
+            <textarea id="edit-desc" class="control-input" style="height:70px;">${escapeHtml(v.desc || '')}</textarea>
           </div>
 
           <button class="btn-gold" style="width:100%; padding:12px; font-size:0.9rem;" onclick="saveEditedCar(${vIdx})">💾 Guardar Todos los Cambios en Supabase</button>
@@ -1688,51 +1799,60 @@
       renderAdminContent();
     }
 
+    function resizeAndEncodeImage(file, maxW, maxH, quality, cb) {
+      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+        alert(`Formato no permitido (${file.name}). Solo JPG, PNG o WEBP.`);
+        return;
+      }
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        alert(`La imagen ${file.name} supera el máximo de 10 MB.`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxW) { height *= maxW / width; width = maxW; }
+          } else {
+            if (height > maxH) { width *= maxH / height; height = maxH; }
+          }
+
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          cb(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
     function addCarImage(vIdx, input) {
       const file = input.files[0];
       if (file) {
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-          vehicles[vIdx].images.push(e.target.result);
+        resizeAndEncodeImage(file, 900, 700, 0.75, async (dataUrl) => {
+          vehicles[vIdx].images.push(dataUrl);
           await saveVehicleToSupabase(vehicles[vIdx]);
           renderAdminContent();
-        };
-        reader.readAsDataURL(file);
+        });
       }
     }
 
     function handleMultipleUpload(input) {
       const files = Array.from(input.files);
       files.forEach(file => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const img = new Image();
-          img.onload = function() {
-            const canvas = document.createElement('canvas');
-            const MAX_WIDTH = 900;
-            const MAX_HEIGHT = 700;
-            let width = img.width;
-            let height = img.height;
-
-            if (width > height) {
-              if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
-            } else {
-              if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
-            }
-
-            canvas.width = width; canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
-            
-            tempUploadImages.push(canvas.toDataURL('image/jpeg', 0.75));
-            const previewGrid = document.getElementById('add-preview-grid');
-            if(previewGrid) {
-              previewGrid.innerHTML = tempUploadImages.map(img => `<div class="admin-photo-thumb"><img src="${img}"></div>`).join('');
-            }
-          };
-          img.src = e.target.result;
-        };
-        reader.readAsDataURL(file);
+        resizeAndEncodeImage(file, 900, 700, 0.75, (dataUrl) => {
+          tempUploadImages.push(dataUrl);
+          const previewGrid = document.getElementById('add-preview-grid');
+          if (previewGrid) {
+            previewGrid.innerHTML = tempUploadImages.map(img => `<div class="admin-photo-thumb"><img src="${escapeHtml(sanitizeImageUrl(img))}"></div>`).join('');
+          }
+        });
       });
     }
 
